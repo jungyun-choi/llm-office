@@ -142,6 +142,18 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 - `C2/C3` 화면은 `Cache-Control: no-store`를 사용하고 local storage, URL query, browser history와 client-side telemetry에 내용을 저장하지 않는다.
 - CSRF 방어, strict CSP, output encoding과 same-site cookie를 적용한다.
 
+### 4.5 외부 Codex 합성 POC 경계
+
+로컬 Codex bridge는 제품 통합이 아니라 합성 POC 전용 예외 경로다.
+
+- 기본값은 비활성화이며 사용자가 로컬 개발 환경에서 명시적으로 선택해야 한다.
+- `SyntheticSimulatorSource`의 canonical root와 결과 schema가 정확히 일치할 때만 실행한다.
+- 요청과 allowlist snapshot은 argv, URL, 로그 또는 저장소에 남기지 않고 stdin으로만 전달한다.
+- Codex CLI 버전을 고정하고 user config, project rules, plugin, MCP, browser, shell, multi-agent 및 쓰기 도구를 fail-closed로 비활성화한다.
+- bridge는 loopback에만 bind하고 exact Origin/Host, 일회성 고엔트로피 token, 본문 크기, 단일 실행과 timeout을 검사한다.
+- 회사 요청, 코드, Wiki, 경로, 성능 수치 또는 식별자는 이 경로에 절대 입력하지 않는다.
+- 실제 사내 source를 연결하기 전에는 별도 OS identity/container, 내부 LLM endpoint, service credential과 egress deny 정책으로 교체한다.
+
 ## 5. 원문 비반출 처리 모델
 
 ### 5.1 수명 주기
@@ -537,4 +549,3 @@ DRAFT
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) 및 [NIST AI 600-1 Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf), AI 위험의 식별·측정·관리·거버넌스
 - [NIST SP 800-207 Zero Trust Architecture](https://csrc.nist.gov/pubs/sp/800/207/final), 위치를 신뢰하지 않는 요청별 최소 권한과 정책 집행
 - [OWASP Top 10:2025](https://owasp.org/Top10/), 접근 제어, 보안 설정, 공급망, 암호화, injection, 인증과 보안 로깅
-

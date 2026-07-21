@@ -1,0 +1,7 @@
+{
+  "channels": 4,
+  "channel_bandwidth_mib_s": 420,
+  "read_base_latency_us": 78,
+  "write_base_latency_us": 145,
+  "queue_penalty_us": 9
+}

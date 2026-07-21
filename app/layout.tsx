@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
+import { OFFICE_COPY } from "./features/office/copy";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,14 +13,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "AI Office | 시뮬레이션 개발 준비실";
-const description =
-  "SSD·UFS 성능 시뮬레이터 개발 조직을 위한 AI 에이전트 오퍼레이션 대시보드";
+const { title, description } = OFFICE_COPY.metadata;
+const DEFAULT_PUBLIC_ORIGIN = "https://ai-office-sim-prep.chil9199.chatgpt.site";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const origin = getRequestOrigin(requestHeaders);
-  const socialImage = new URL("/og.png", origin).toString();
+export function generateMetadata(): Metadata {
+  const origin = getPublicOrigin(process.env.AI_OFFICE_PUBLIC_ORIGIN);
+  const socialImage = new URL("/og-ai-office.png", origin).toString();
 
   return {
     metadataBase: new URL(origin),
@@ -32,31 +30,34 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     openGraph: {
       title,
-      description: "조사부터 견적, 테스트 설계, Git 이슈화까지 한눈에 지휘하세요.",
+      description: OFFICE_COPY.metadata.openGraphDescription,
       type: "website",
       locale: "ko_KR",
-      images: [{ url: socialImage, width: 1731, height: 909, alt: title }],
+      images: [{ url: socialImage, width: 1672, height: 941, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description: "SSD·UFS 시뮬레이션 개발 준비를 지휘하는 AI 오피스",
+      description: OFFICE_COPY.metadata.twitterDescription,
       images: [socialImage],
     },
   };
 }
 
-function getRequestOrigin(requestHeaders: Headers): string {
-  const forwardedHost = requestHeaders.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwardedHost ?? requestHeaders.get("host");
-  const forwardedProtocol = requestHeaders.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const protocol = forwardedProtocol === "http" ? "http" : "https";
-
-  if (host && /^[a-z0-9.-]+(?::\d+)?$/i.test(host)) {
-    return `${protocol}://${host}`;
+function getPublicOrigin(configuredOrigin: string | undefined): string {
+  if (!configuredOrigin) return DEFAULT_PUBLIC_ORIGIN;
+  try {
+    const url = new URL(configuredOrigin);
+    const isLoopback = url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+    const protocolAllowed = url.protocol === "https:" ||
+      (url.protocol === "http:" && isLoopback);
+    const isBareOrigin = url.pathname === "/" && !url.search && !url.hash &&
+      !url.username && !url.password;
+    return protocolAllowed && isBareOrigin ? url.origin : DEFAULT_PUBLIC_ORIGIN;
+  } catch {
+    return DEFAULT_PUBLIC_ORIGIN;
   }
-
-  return "https://ai-office.local";
 }
 
 export default function RootLayout({

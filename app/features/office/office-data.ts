@@ -1,0 +1,128 @@
+import type { OfficeAgent, WorkflowStage } from "./types";
+
+export const OFFICE_AGENTS: readonly OfficeAgent[] = [
+  {
+    id: "research",
+    name: "프로브",
+    role: "자료조사",
+    deskLabel: "PROBE",
+    specialty: "근거와 참고 방향 수집",
+    seat: "north-west",
+  },
+  {
+    id: "estimate",
+    name: "칼크",
+    role: "견적분석",
+    deskLabel: "CALC",
+    specialty: "범위와 의존 관계 정리",
+    seat: "north",
+  },
+  {
+    id: "test",
+    name: "베리파이",
+    role: "테스트",
+    deskLabel: "VERIFY",
+    specialty: "검증 항목과 예외 점검",
+    seat: "north-east",
+  },
+  {
+    id: "framework",
+    name: "플래시-X",
+    role: "프레임워크",
+    deskLabel: "FLASH-X",
+    specialty: "구조와 실행 순서 설계",
+    seat: "south-west",
+  },
+  {
+    id: "git",
+    name: "깃메이트",
+    role: "Git",
+    deskLabel: "GITMATE",
+    specialty: "실행 가능한 이슈 초안",
+    seat: "south-east",
+  },
+  {
+    id: "orchestrator",
+    name: "오비트",
+    role: "오케스트레이터",
+    deskLabel: "ORBIT",
+    specialty: "업무 분해와 최종 정리",
+    seat: "south",
+  },
+] as const;
+
+export const DEMO_WORKFLOW: readonly WorkflowStage[] = [
+  {
+    id: "intake",
+    label: "업무 접수",
+    shortLabel: "접수",
+    description: "오케스트레이터가 요청을 읽고 팀의 작업으로 나누고 있습니다.",
+    durationMs: 2200,
+    senderIds: [],
+    receiverIds: ["orchestrator"],
+    transfer: { id: "request-in", from: "inbox", to: "orchestrator", route: "inbox-orchestrator" },
+    agentActions: { orchestrator: "요청을 읽고 업무를 나누는 중" },
+  },
+  {
+    id: "parallel",
+    label: "자료조사 · 프레임워크 병렬 작업",
+    shortLabel: "조사 · 설계",
+    description: "자료조사와 프레임워크 에이전트가 동시에 방향을 만들고 있습니다.",
+    durationMs: 3200,
+    senderIds: ["orchestrator"],
+    receiverIds: ["research", "framework"],
+    transfer: { id: "to-specialists", from: "orchestrator", to: "research", route: "orchestrator-research" },
+    agentActions: {
+      orchestrator: "두 작업을 동시에 전달하는 중",
+      research: "필요한 근거와 참고 방향 조사 중",
+      framework: "구조와 실행 순서 설계 중",
+    },
+  },
+  {
+    id: "review",
+    label: "견적 · 테스트 검토",
+    shortLabel: "견적 · 테스트",
+    description: "견적분석과 테스트 에이전트가 실행 범위와 검증 항목을 다듬고 있습니다.",
+    durationMs: 3200,
+    senderIds: ["research", "framework"],
+    receiverIds: ["estimate", "test"],
+    transfer: { id: "to-review", from: "research", to: "estimate", route: "research-estimate" },
+    agentActions: {
+      research: "조사 메모를 전달하는 중",
+      framework: "설계 메모를 전달하는 중",
+      estimate: "실행 범위와 의존 관계 정리 중",
+      test: "검증 항목과 예외 상황 점검 중",
+    },
+  },
+  {
+    id: "git-draft",
+    label: "Git 이슈 초안",
+    shortLabel: "Git 초안",
+    description: "Git 에이전트가 팀의 메모를 실행 가능한 이슈 한 장으로 묶고 있습니다.",
+    durationMs: 2600,
+    senderIds: ["estimate", "test"],
+    receiverIds: ["git"],
+    transfer: { id: "review-to-git", from: "test", to: "git", route: "test-git" },
+    agentActions: {
+      estimate: "범위 메모를 전달하는 중",
+      test: "검증 메모를 전달하는 중",
+      git: "Git 이슈 초안을 작성하는 중",
+    },
+  },
+  {
+    id: "finalize",
+    label: "오케스트레이터 최종 정리",
+    shortLabel: "최종 정리",
+    description: "오케스트레이터가 모든 결과를 읽기 쉬운 한 장으로 정리하고 있습니다.",
+    durationMs: 3000,
+    senderIds: ["git"],
+    receiverIds: ["orchestrator"],
+    transfer: { id: "git-to-orchestrator", from: "git", to: "orchestrator", route: "git-orchestrator" },
+    agentActions: {
+      git: "완성된 이슈 초안을 전달하는 중",
+      orchestrator: "팀의 결과를 한 장으로 정리하는 중",
+    },
+  },
+] as const;
+
+export const REDUCED_MOTION_STAGE_DURATION_MS = 180;

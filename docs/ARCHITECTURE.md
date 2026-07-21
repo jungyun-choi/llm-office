@@ -80,6 +80,27 @@ AI Office는 사내 Wiki, 코드, 디버깅 히스토리를 사내 신뢰 영역
 
 각 서버 모듈은 `Controller → Application Service → Repository Port → Adapter/Database` 흐름을 지킨다. controller는 인증된 명령을 service에 전달하고 결과를 매핑할 뿐이며, 상태 전이·승인·분류 규칙은 service/domain에 둔다.
 
+### 3.2 POC의 교체 가능한 실행 계약
+
+웹 사무실은 특정 CLI, 모델 또는 저장소 형식을 알지 않는다. 두 port만 의존한다.
+
+```text
+Office UI
+   │ normalized request / progress / result
+   ▼
+POC Application Service
+   ├─ AgentRuntime      ─ CodexCli | OpenCodeCli | Deterministic
+   └─ SimulatorSource  ─ Synthetic | Internal Connector
+```
+
+- `AgentRuntime`은 정규화된 요청과 source snapshot을 받아 버전이 고정된 결과 schema를 반환한다.
+- `SimulatorSource`는 허용된 자료만 최소 snapshot과 digest로 만들며, 모델이 임의로 파일 시스템을 탐색하지 않게 한다.
+- UI 애니메이션은 모델 고유 event나 token stream이 아니라 `accepted`, 역할별 handoff, `completed` 같은 coarse event만 사용한다.
+- 외부 Codex runtime은 합성 source와만 결합할 수 있다. 실제 사내 source는 사내 OpenCode/LLM runtime과 동일한 신뢰 영역에서만 결합한다.
+- Git adapter는 분석 결과를 초안으로 바꿀 뿐이며, publish 권한과 사람 승인은 별도 port로 유지한다.
+
+이 경계 덕분에 POC에서 `CodexCliRuntime + SyntheticSimulatorSource`를 사용한 뒤 UI를 바꾸지 않고 `OpenCodeCliRuntime + InternalRepoSource`로 전환할 수 있다.
+
 ## 4. 배포 모드
 
 ### 4.1 Mode A — 완전 온프레미스(기본)
@@ -570,4 +591,3 @@ receipt는 `adapterId, repositoryRef, externalKey, externalUrl, createdAt, reque
 6. 온프레미스 E2E를 통과한 후에만 split outbound topology를 연다.
 
 이 순서는 Git write와 외부 relay가 비반출·승인 통제보다 먼저 배포되는 것을 방지한다.
-

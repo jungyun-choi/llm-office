@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["roleOutputs", "brief"],
+  "properties": {
+    "roleOutputs": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "summary", "findings", "evidence"],
+        "properties": {
+          "role": { "enum": ["research", "framework", "estimate", "test", "git"] },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "findings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": { "type": "string", "minLength": 1, "maxLength": 600 }
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          }
+        }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "objective",
+        "scope",
+        "outOfScope",
+        "assumptions",
+        "workBreakdown",
+        "acceptanceCriteria",
+        "testStrategy",
+        "risks",
+        "issueDraft"
+      ],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "objective": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "scope": { "$ref": "#/$defs/textList" },
+        "outOfScope": { "$ref": "#/$defs/textList" },
+        "assumptions": { "$ref": "#/$defs/textList" },
+        "acceptanceCriteria": { "$ref": "#/$defs/textList" },
+        "testStrategy": { "$ref": "#/$defs/textList" },
+        "risks": { "$ref": "#/$defs/textList" },
+        "workBreakdown": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "owner", "effort", "dependencies"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "owner": { "enum": ["research", "framework", "estimate", "test", "git"] },
+              "effort": { "enum": ["XS", "S", "M", "L"] },
+              "dependencies": {
+                "type": "array",
+                "maxItems": 8,
+                "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+              }
+            }
+          }
+        },
+        "issueDraft": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "body", "labels"],
+          "properties": {
+            "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "body": { "type": "string", "minLength": 1, "maxLength": 8000 },
+            "labels": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "textList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 1, "maxLength": 600 }
+    }
+  }
+}
