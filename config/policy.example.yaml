@@ -1,0 +1,43 @@
+schema_version: 1
+deployment_mode: full_on_prem # full_on_prem | hybrid_sanitized
+
+data_boundary:
+  default_classification: RESTRICTED_SOURCE
+  external_egress: deny
+  allowed_external_classifications: [EXPORTABLE_METADATA, EXPORT-SANITIZED]
+  raw_content_must_remain_internal: true
+  free_text_requires_dlp: true
+  unknown_field_action: block
+
+sources:
+  wiki:
+    access: read_only
+    export_raw_content: false
+  repository:
+    access: read_only
+    export_code_or_diff: false
+  simulator_results:
+    access: read_only
+    export_raw_metrics_or_traces: false
+
+git_write:
+  enabled: true
+  allowed_actions: [create_issue]
+  require_human_approval: always
+  required_approval_count: 2
+  bind_approval_to_canonical_draft_sha256: true
+  approval_ttl_minutes: 30
+  deny_actions: [push, merge, delete, change_permissions]
+
+execution:
+  outbound_only_connector: true
+  max_job_minutes: 20
+  max_tool_calls_per_job: 80
+  kill_switch_file: /etc/ai-office/DISABLED
+
+audit:
+  append_only: true
+  record_prompt_hash: true
+  record_tool_intent_and_result_hash: true
+  never_record_secrets_or_raw_source: true
+  retention_days: 365

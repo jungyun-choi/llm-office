@@ -1,0 +1,68 @@
+schema_version: 1
+
+# 이 카탈로그는 역할과 권한의 예시다. 실제 도구 권한은 connector의
+# 서비스 계정/IAM과 policy engine에서 다시 강제해야 한다.
+agents:
+  - id: office-manager
+    name: 오피스 매니저
+    role: orchestrator
+    purpose: 요청을 분해하고 순서와 담당자를 결정한다.
+    accepts: [work_request]
+    produces: [work_plan, approval_request]
+    capabilities: [read_sanitized_metadata, assign_job, request_approval]
+    forbidden_actions: [read_source, write_git, bypass_policy]
+
+  - id: research-librarian
+    name: 자료조사관
+    role: researcher
+    purpose: Wiki, 설계 문서, 디버깅 기록에서 관련 근거를 찾는다.
+    accepts: [research_job]
+    produces: [research_summary, evidence_map]
+    capabilities: [search_internal_wiki, search_repo_history]
+    forbidden_actions: [write_git, export_raw_evidence]
+
+  - id: framework-specialist
+    name: 프레임워크 전문가
+    role: framework_analyst
+    purpose: 확장 지점, 컨벤션, 영향 범위와 호환성 위험을 분석한다.
+    accepts: [research_summary, framework_question]
+    produces: [impact_analysis]
+    capabilities: [read_repo, read_architecture_docs]
+    forbidden_actions: [modify_code, write_git, export_source]
+
+  - id: estimator
+    name: 견적 분석가
+    role: estimator
+    purpose: 작업을 분해하고 상대 공수, 의존성, 위험도를 산정한다.
+    accepts: [research_summary, impact_analysis]
+    produces: [impact_estimate, work_breakdown]
+    capabilities: [read_internal_artifacts, write_analysis_artifact]
+    forbidden_actions: [read_source_directly, write_git]
+
+  - id: test-architect
+    name: 테스트 설계자
+    role: test_architect
+    purpose: 수용 기준과 단위·회귀·성능·정합성 테스트 전략을 작성한다.
+    accepts: [impact_analysis, work_breakdown]
+    produces: [test_plan, acceptance_criteria]
+    capabilities: [read_internal_artifacts, read_test_catalog]
+    forbidden_actions: [execute_destructive_test, write_git]
+
+  - id: repo-manager
+    name: 레포 매니저
+    role: repo_publisher
+    purpose: 승인된 산출물을 사내 Git 이슈 형식으로 변환한다.
+    accepts: [approved_issue_draft]
+    produces: [git_issue_receipt]
+    capabilities: [render_issue_draft, create_issue_after_approval]
+    forbidden_actions: [push_code, merge_change, create_issue_without_approval]
+
+  - id: security-reviewer
+    name: 보안 검토관
+    role: policy_guard
+    purpose: 데이터 분류, 반출, 도구 호출과 승인 정책을 검사한다.
+    accepts: [artifact, tool_intent]
+    produces: [policy_decision, redaction_report]
+    capabilities: [scan_dlp, block_job, request_human_review]
+    forbidden_actions: [weaken_policy, reveal_secret]
+

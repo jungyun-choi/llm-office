@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_01J00000000000000000000000",
+  "request_id": "req_01J00000000000000000000000",
+  "status": "waiting_for_approval",
+  "completed_stages": ["research", "impact", "estimate", "test_design"],
+  "artifact": {
+    "artifact_id": "art_01J00000000000000000000000",
+    "artifact_type": "issue_outline",
+    "classification": "EXPORT-SANITIZED",
+    "policy_version": "2026-07-01",
+    "producer_role": "repo-manager",
+    "summary": "요청 기능의 구현 전 조사와 영향도 분석이 완료되었습니다.",
+    "findings": [
+      {
+        "finding_id": "finding-1",
+        "statement": "기존 확장 지점을 재사용할 수 있으나 회귀 검증 범위가 넓습니다.",
+        "confidence": "medium",
+        "evidence_refs": ["ev_opaque_7f3a"]
+      }
+    ],
+    "evidence_refs": [
+      {
+        "opaque_id": "ev_opaque_7f3a",
+        "source_type": "wiki",
+        "retrieved_at": "2026-07-21T09:06:00Z"
+      }
+    ],
+    "assumptions": ["요청 범위는 기존 공개 인터페이스를 유지합니다."],
+    "risks": [
+      {
+        "category": "regression",
+        "severity": "high",
+        "mitigation": "대표 workload와 경계 조건을 승인된 내부 환경에서 재검증합니다."
+      }
+    ],
+    "work_breakdown": [
+      {
+        "task": "영향 범위 구현",
+        "relative_effort": "M",
+        "dependencies": ["dep_opaque_3c2f"]
+      }
+    ],
+    "acceptance_criteria": ["기존 호환성 테스트가 모두 통과합니다."],
+    "redaction": {
+      "scanner_version": "dlp-1.0",
+      "policy_id": "egress-default-deny",
+      "decision": "allow",
+      "categories_removed": ["source_path", "performance_metric"]
+    },
+    "integrity": {
+      "content_sha256": "sha256:example-only",
+      "signature": "example-signature",
+      "key_id": "connector-signing-key"
+    },
+    "created_at": "2026-07-21T09:12:00Z",
+    "expires_at": "2026-07-22T09:12:00Z"
+  }
+}

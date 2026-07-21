@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_01J00000000000000000000000",
+  "request_id": "req_01J00000000000000000000000",
+  "work_item_label": "REQ-2026-0042",
+  "job_type": "feature_preparation",
+  "priority": "P1",
+  "source_classification": "RESTRICTED_SOURCE",
+  "requested_outputs": [
+    "research_summary",
+    "impact_estimate",
+    "test_plan",
+    "issue_draft"
+  ],
+  "constraints": {
+    "code_changes_allowed": false,
+    "git_writes_allowed": false,
+    "raw_content_egress_allowed": false
+  },
+  "created_at": "2026-07-21T09:00:00Z"
+}
