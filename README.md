@@ -149,6 +149,7 @@ OpenCode 경로는 런타임을 명시적으로 선택한 로컬 환경에서만
 
 ## 문서
 
+- [사내 개인 Linux 서버 운영 가이드](docs/INTERNAL_SERVER_RUNBOOK.md)
 - [Claude용 사내 연동 인계서](docs/CLAUDE_COMPANY_INTEGRATION.md)
 - [시스템 아키텍처](docs/ARCHITECTURE.md)
 - [보안 및 위협 모델](docs/SECURITY.md)
