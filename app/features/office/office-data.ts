@@ -2,12 +2,28 @@ import type { OfficeAgent, WorkflowStage } from "./types";
 
 export const OFFICE_AGENTS: readonly OfficeAgent[] = [
   {
+    id: "orchestrator",
+    name: "오비트",
+    role: "오케스트레이터",
+    deskLabel: "ORBIT",
+    specialty: "업무 분해와 최종 정리",
+    seat: "south",
+  },
+  {
     id: "research",
     name: "프로브",
     role: "자료조사",
     deskLabel: "PROBE",
     specialty: "근거와 참고 방향 수집",
     seat: "north-west",
+  },
+  {
+    id: "framework",
+    name: "플래시-X",
+    role: "프레임워크",
+    deskLabel: "FLASH-X",
+    specialty: "구조와 실행 순서 설계",
+    seat: "south-west",
   },
   {
     id: "estimate",
@@ -26,28 +42,12 @@ export const OFFICE_AGENTS: readonly OfficeAgent[] = [
     seat: "north-east",
   },
   {
-    id: "framework",
-    name: "플래시-X",
-    role: "프레임워크",
-    deskLabel: "FLASH-X",
-    specialty: "구조와 실행 순서 설계",
-    seat: "south-west",
-  },
-  {
     id: "git",
     name: "깃메이트",
     role: "Git",
     deskLabel: "GITMATE",
     specialty: "실행 가능한 이슈 초안",
     seat: "south-east",
-  },
-  {
-    id: "orchestrator",
-    name: "오비트",
-    role: "오케스트레이터",
-    deskLabel: "ORBIT",
-    specialty: "업무 분해와 최종 정리",
-    seat: "south",
   },
 ] as const;
 
@@ -125,4 +125,4 @@ export const DEMO_WORKFLOW: readonly WorkflowStage[] = [
   },
 ] as const;
 
-export const REDUCED_MOTION_STAGE_DURATION_MS = 180;
+export const REDUCED_MOTION_STAGE_DURATION_MS = 1_800;

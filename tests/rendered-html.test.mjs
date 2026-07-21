@@ -62,12 +62,30 @@ test("server-renders the AI Office floor", async () => {
 });
 
 test("removes starter-only code and keeps interactive office wiring", async () => {
-  const [page, layout, officeClient, workflow, composer, drawer, packageJson] = await Promise.all([
+  const [
+    page,
+    layout,
+    officeClient,
+    officeFloor,
+    officeData,
+    workflow,
+    composer,
+    drawer,
+    styles,
+    packageJson,
+  ] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(
       new URL("../app/features/office/office-client.tsx", import.meta.url),
       "utf8",
+    ),
+    readFile(
+      new URL("../app/features/office/components/office-floor.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/features/office/office-data.ts", import.meta.url), "utf8",
     ),
     readFile(
       new URL("../app/features/office/hooks/use-office-workflow.ts", import.meta.url),
@@ -81,6 +99,7 @@ test("removes starter-only code and keeps interactive office wiring", async () =
       new URL("../app/features/office/components/result-drawer.tsx", import.meta.url),
       "utf8",
     ),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
@@ -90,6 +109,11 @@ test("removes starter-only code and keeps interactive office wiring", async () =
   assert.match(layout, /OFFICE_COPY\.metadata/);
   assert.match(officeClient, /<OfficeFloor/);
   assert.match(officeClient, /<ResultDrawer/);
+  assert.match(officeFloor, /handoff-caption__mobile-details/);
+  assert.match(officeFloor, /activeWorkers\.map/);
+  assert.match(officeFloor, /data-workflow-status/);
+  assert.match(officeFloor, /className="sr-only" role="status" aria-live="polite"/);
+  assert.doesNotMatch(officeFloor, /className="handoff-caption" aria-live=/);
   assert.match(workflow, /DEMO_WORKFLOW/);
   assert.match(workflow, /window\.clearTimeout/);
   assert.match(workflow, /slice\(0, MAX_RESULTS\)/);
@@ -97,6 +121,25 @@ test("removes starter-only code and keeps interactive office wiring", async () =
   assert.match(composer, /event\.metaKey \|\| event\.ctrlKey/);
   assert.match(drawer, /querySelectorAll<HTMLElement>/);
   assert.match(drawer, /activeElement === last/);
+  assert.ok(
+    officeData.indexOf('id: "orchestrator"') < officeData.indexOf('id: "research"'),
+    "the orchestrator should be the first mobile office seat",
+  );
+  const reducedMotionDwell = officeData.match(
+    /REDUCED_MOTION_STAGE_DURATION_MS\s*=\s*([\d_]+)/,
+  );
+  assert.ok(reducedMotionDwell, "reduced-motion dwell should be declared");
+  assert.ok(
+    Number(reducedMotionDwell[1].replaceAll("_", "")) >= 1_500,
+    "reduced-motion stages must remain readable",
+  );
+  assert.match(styles, /\.handoff-caption__mobile-details/);
+  assert.match(styles, /\.agent-stations\s*\{[\s\S]*?order:\s*4;/);
+  assert.match(
+    styles,
+    /\.agent-station\[data-state="sending"\] \.agent-station__label small \{[\s\S]*?color: var\(--office-navy\);/,
+  );
+  assert.doesNotMatch(styles, /\[data-state="idle"\] \.agent-station__label,/);
   assert.match(packageJson, /"lucide-react"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 

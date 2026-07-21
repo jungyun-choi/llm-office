@@ -1,8 +1,8 @@
-import { BriefcaseBusiness } from "lucide-react";
+import { BriefcaseBusiness, FileText } from "lucide-react";
 
 import { OFFICE_COPY } from "../copy";
-import { OFFICE_AGENTS } from "../office-data";
-import type { AgentFlowState, AgentId, OfficeRequestInput, OfficeResult, WorkflowStage, WorkflowStatus } from "../types";
+import { DEMO_WORKFLOW, OFFICE_AGENTS } from "../office-data";
+import type { AgentFlowState, AgentId, OfficeAgent, OfficeRequestInput, OfficeResult, WorkflowStage, WorkflowStatus } from "../types";
 import { AgentDesk } from "./agent-desk";
 import { CollaborationTable } from "./collaboration-table";
 import { ResultVault } from "./result-vault";
@@ -22,9 +22,24 @@ interface OfficeFloorProps {
 
 export function OfficeFloor(props: OfficeFloorProps) {
   const liveCaption = getLiveCaption(props.status, props.currentStage, props.errorMessage);
+  const stageNumber = getStageNumber(props.currentStage);
+  const activeWorkers = getActiveWorkers(props.currentStage);
+  const handoff = getHandoff(props.currentStage);
+  const accessibleProgress = getAccessibleProgressSummary(
+    props.status,
+    props.currentStage,
+    props.errorMessage,
+    stageNumber,
+    activeWorkers,
+    handoff,
+  );
 
   return (
-    <section className="office-room" aria-labelledby="office-floor-title">
+    <section
+      className="office-room"
+      aria-labelledby="office-floor-title"
+      data-workflow-status={props.status}
+    >
       <div className="office-room__wash" aria-hidden="true" />
       <div className="office-room__header">
         <span>{OFFICE_COPY.floor.eyebrow}</span>
@@ -51,14 +66,56 @@ export function OfficeFloor(props: OfficeFloorProps) {
       </ul>
       <CollaborationTable />
       <TransferPacket stage={props.currentStage} status={props.status} />
-      <div className="handoff-caption" aria-live="polite" aria-atomic="true">
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {accessibleProgress}
+      </p>
+      <div className="handoff-caption">
         <span
           className={props.status === "running" ? "is-active" : props.status === "error" ? "is-error" : ""}
           aria-hidden="true"
         />
         <div>
-          {props.currentStage && <strong>{props.currentStage.label}</strong>}
+          <div className="handoff-caption__heading">
+            {props.status === "running" && stageNumber !== null && (
+              <span className="handoff-caption__step">
+                {stageNumber} / {DEMO_WORKFLOW.length}
+              </span>
+            )}
+            {props.currentStage && <strong>{props.currentStage.label}</strong>}
+          </div>
           <p>{liveCaption}</p>
+          {props.status === "running" && props.currentStage && (
+            <div className="handoff-caption__mobile-details">
+              <span className="handoff-caption__eyebrow">{OFFICE_COPY.floor.liveWorkLabel}</span>
+              <ul aria-label={OFFICE_COPY.floor.activeAgentsLabel}>
+                {activeWorkers.map((worker) => (
+                  <li key={worker.id}>
+                    <span className="handoff-caption__worker-dot" aria-hidden="true" />
+                    <div>
+                      <span>
+                        <strong>{worker.name}</strong>
+                        <small>{worker.role}</small>
+                      </span>
+                      <p>{worker.action}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {handoff && (
+                <div
+                  className="handoff-caption__transfer"
+                  aria-hidden="true"
+                >
+                  <span>{handoff.from}</span>
+                  <span className="handoff-caption__track">
+                    <i />
+                    <FileText size={13} strokeWidth={2.2} />
+                  </span>
+                  <span>{handoff.to}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <ResultVault
@@ -69,6 +126,58 @@ export function OfficeFloor(props: OfficeFloorProps) {
       <TaskComposer isRunning={props.status === "running"} onRequest={props.onRequest} />
     </section>
   );
+}
+
+interface ActiveWorker {
+  id: AgentId;
+  name: string;
+  role: string;
+  action: string;
+}
+
+interface HandoffLabel {
+  from: string;
+  to: string;
+}
+
+const AGENTS_BY_ID = new Map<AgentId, OfficeAgent>(
+  OFFICE_AGENTS.map((agent) => [agent.id, agent] as const),
+);
+
+function getStageNumber(stage: WorkflowStage | null): number | null {
+  if (!stage) return null;
+  const index = DEMO_WORKFLOW.findIndex((candidate) => candidate.id === stage.id);
+  return index < 0 ? null : index + 1;
+}
+
+function getActiveWorkers(stage: WorkflowStage | null): readonly ActiveWorker[] {
+  if (!stage) return [];
+  return stage.receiverIds.flatMap((id) => {
+    const agent = AGENTS_BY_ID.get(id);
+    if (!agent) return [];
+    return [{
+      id,
+      name: agent.name,
+      role: agent.role,
+      action: stage.agentActions[id] ?? agent.specialty,
+    }];
+  });
+}
+
+function getHandoff(stage: WorkflowStage | null): HandoffLabel | null {
+  if (!stage) return null;
+  const from = stage.senderIds.length === 0
+    ? OFFICE_COPY.floor.requestInbox
+    : getAgentNames(stage.senderIds);
+  const to = getAgentNames(stage.receiverIds);
+  return to ? { from, to } : null;
+}
+
+function getAgentNames(ids: readonly AgentId[]): string {
+  return ids.flatMap((id) => {
+    const agent = AGENTS_BY_ID.get(id);
+    return agent ? [agent.name] : [];
+  }).join(" · ");
 }
 
 function getAgentFlowState(
@@ -103,6 +212,27 @@ function getLiveCaption(
   if (status === "complete") return OFFICE_COPY.progress.complete;
   if (status === "running" && stage) return stage.description;
   return OFFICE_COPY.progress.idle;
+}
+
+function getAccessibleProgressSummary(
+  status: WorkflowStatus,
+  stage: WorkflowStage | null,
+  errorMessage: string | null,
+  stageNumber: number | null,
+  activeWorkers: readonly ActiveWorker[],
+  handoff: HandoffLabel | null,
+): string {
+  if (status === "error") return errorMessage ?? OFFICE_COPY.progress.error;
+  if (status === "complete") return OFFICE_COPY.progress.complete;
+  if (status !== "running" || !stage || stageNumber === null) return OFFICE_COPY.progress.idle;
+
+  const workers = activeWorkers.map((worker) => worker.name).join(" · ");
+  const transfer = handoff
+    ? `${handoff.from}에서 ${handoff.to}로 업무 전달. `
+    : "";
+  const workerStatus = workers ? `${workers} 작업 중.` : "담당 에이전트 배정 중.";
+
+  return `${stageNumber}/${DEMO_WORKFLOW.length} 단계, ${stage.label}. ${transfer}${workerStatus}`;
 }
 
 function OfficeDecor() {

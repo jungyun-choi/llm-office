@@ -974,6 +974,24 @@ textarea:focus-visible {
 
 .handoff-caption > div {
   min-width: 0;
+  flex: 1;
+}
+
+.handoff-caption__heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.handoff-caption__step {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--office-teal-pale);
+  color: var(--office-teal-dark);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 800;
 }
 
 .handoff-caption strong {
@@ -989,6 +1007,10 @@ textarea:focus-visible {
   color: var(--office-ink-soft);
   font-size: 10px;
   line-height: 1.45;
+}
+
+.handoff-caption__mobile-details {
+  display: none;
 }
 
 .result-vault {
@@ -1848,6 +1870,12 @@ textarea:focus-visible {
   to { opacity: 1; }
 }
 
+@keyframes mobile-packet-travel {
+  0% { opacity: .25; transform: translateX(0); }
+  20%, 80% { opacity: 1; }
+  100% { opacity: .25; transform: translateX(52px); }
+}
+
 @keyframes cabinet-arrival {
   0% { transform: translateY(0); }
   35% { transform: translateY(-5px); }
@@ -1936,7 +1964,7 @@ textarea:focus-visible {
 
   .agent-stations {
     position: static;
-    order: 3;
+    order: 4;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -1948,10 +1976,35 @@ textarea:focus-visible {
   }
 
   .agent-station__content {
+    position: relative;
     height: 100%;
     padding: 8px;
     border-color: rgb(198 192 180 / 68%);
     background: rgb(255 253 248 / 66%);
+  }
+
+  .office-room[data-workflow-status="running"] .agent-station[data-state="idle"] .agent-desk-graphic,
+  .office-room[data-workflow-status="running"] .agent-station[data-state="idle"] .agent-station__content > p {
+    opacity: .48;
+  }
+
+  .agent-station[data-state="sending"] .agent-station__content,
+  .agent-station[data-state="receiving"] .agent-station__content {
+    padding: 7px;
+    border-width: 2px;
+    transform: translateY(-2px);
+  }
+
+  .agent-station[data-state="sending"] .agent-station__content {
+    border-color: rgb(196 138 53 / 78%);
+    background: #fff8e9;
+    box-shadow: 0 0 0 3px rgb(196 138 53 / 13%), 0 12px 25px rgb(11 34 50 / 11%);
+  }
+
+  .agent-station[data-state="receiving"] .agent-station__content {
+    border-color: rgb(19 141 129 / 78%);
+    background: #effaf7;
+    box-shadow: 0 0 0 3px rgb(19 141 129 / 13%), 0 12px 25px rgb(11 34 50 / 11%);
   }
 
   .agent-desk-graphic {
@@ -1979,18 +2032,198 @@ textarea:focus-visible {
 
   .agent-station__label small {
     margin-top: 1px;
+    font-size: 9px;
+    white-space: normal;
+  }
+
+  .agent-station[data-state="sending"] .agent-station__label small,
+  .agent-station[data-state="receiving"] .agent-station__label small {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .agent-station[data-state="sending"] .agent-station__label small {
+    background: var(--office-amber);
+    color: var(--office-navy);
+  }
+
+  .agent-station[data-state="receiving"] .agent-station__label small {
+    background: var(--office-teal-dark);
   }
 
   .agent-station__content > p {
     margin-top: 5px;
+    min-height: 30px;
+    font-size: 10px;
+    line-height: 1.4;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .agent-station[data-state="sending"] .agent-station__content > p,
+  .agent-station[data-state="receiving"] .agent-station__content > p {
+    color: var(--office-navy);
+    font-size: 12px;
+    font-weight: 750;
   }
 
   .handoff-caption {
     position: static;
-    order: 4;
+    order: 3;
     width: 100%;
-    margin-top: 12px;
+    min-height: 0;
+    margin: 0 0 14px;
+    padding: 13px 14px;
+    border: 2px solid rgb(19 141 129 / 28%);
+    background: rgb(255 253 248 / 96%);
+    box-shadow: 0 12px 28px rgb(11 34 50 / 11%);
     transform: none;
+  }
+
+  .handoff-caption > span {
+    width: 10px;
+    height: 10px;
+    margin-top: 5px;
+  }
+
+  .handoff-caption__heading {
+    gap: 8px;
+  }
+
+  .handoff-caption__step {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .handoff-caption__heading > strong {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .handoff-caption > div > p {
+    margin-top: 5px;
+    color: var(--office-navy-faint);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .handoff-caption__mobile-details {
+    display: block;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--office-line);
+  }
+
+  .handoff-caption__eyebrow {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--office-teal-dark);
+    font-family: var(--font-geist-mono), monospace;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: .1em;
+  }
+
+  .handoff-caption__mobile-details ul {
+    display: grid;
+    gap: 7px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .handoff-caption__mobile-details li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    padding: 9px 10px;
+    border: 1px solid rgb(19 141 129 / 18%);
+    border-radius: 9px;
+    background: var(--office-teal-pale);
+  }
+
+  .handoff-caption__worker-dot {
+    width: 9px;
+    height: 9px;
+    margin-top: 5px;
+    border: 2px solid var(--office-paper);
+    border-radius: 50%;
+    background: var(--office-teal);
+    box-shadow: 0 0 0 2px rgb(19 141 129 / 22%);
+  }
+
+  .handoff-caption__mobile-details li > div > span {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .handoff-caption__mobile-details li strong {
+    display: inline;
+    margin: 0;
+    color: var(--office-navy);
+    font-size: 13px;
+  }
+
+  .handoff-caption__mobile-details li small {
+    color: var(--office-teal-dark);
+    font-size: 9px;
+    font-weight: 750;
+  }
+
+  .handoff-caption__mobile-details li p {
+    margin: 2px 0 0;
+    color: var(--office-navy-faint);
+    font-size: 12px;
+    font-weight: 680;
+    line-height: 1.45;
+  }
+
+  .handoff-caption__transfer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+    color: var(--office-ink-soft);
+    font-size: 11px;
+    font-weight: 720;
+    text-align: center;
+  }
+
+  .handoff-caption__track {
+    position: relative;
+    display: block;
+    width: 72px;
+    height: 20px;
+  }
+
+  .handoff-caption__track i {
+    position: absolute;
+    top: 9px;
+    right: 0;
+    left: 0;
+    border-top: 1px dashed rgb(19 141 129 / 52%);
+  }
+
+  .handoff-caption__track svg {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    padding: 2px;
+    border: 1px solid var(--office-line);
+    border-radius: 4px;
+    background: var(--office-paper);
+    color: var(--office-teal-dark);
+    animation: mobile-packet-travel 1.35s ease-in-out infinite;
   }
 
   .result-vault {
