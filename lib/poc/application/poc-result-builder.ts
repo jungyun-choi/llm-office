@@ -26,7 +26,7 @@ export function buildPocRunResult(
       dataRoute: runner.dataRoute,
       label: runner.runtimeLabel,
       model: runner.model,
-      localOnly: runner.dataRoute !== "external-openai",
+      localOnly: !runner.dataRoute.startsWith("external-"),
       fallbackReason: runner.fallbackReason,
       ...runner.metrics,
     },
@@ -35,8 +35,11 @@ export function buildPocRunResult(
     notices: [
       "이 결과는 합성 저장소만 사용한 POC입니다.",
       "코드는 수정되지 않았고 Git 이슈도 실제로 등록되지 않았습니다.",
-      ...(runner.dataRoute === "external-openai"
-        ? ["합성 데이터가 외부 OpenAI 모델로 전송됩니다. 회사 데이터는 절대 입력하지 마세요."]
+      ...(runner.dataRoute.startsWith("external-")
+        ? ["합성 데이터가 외부 모델로 전송됩니다. 회사 데이터는 절대 입력하지 마세요."]
+        : []),
+      ...(runner.dataRoute === "external-opencode-zen"
+        ? ["입력문 원문은 Zen에 전송되지 않고, 서버가 선택한 합성 FlashSim 시나리오로 치환됩니다."]
         : []),
     ],
   };

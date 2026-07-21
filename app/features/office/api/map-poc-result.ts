@@ -23,6 +23,7 @@ const ROLE_META: Record<PocAgentRoleDto, { agentName: string; roleLabel: string 
 
 const DATA_ROUTE_LABELS: Record<PocRunResultDto["execution"]["dataRoute"], string> = {
   "external-openai": "외부 OpenAI · 합성 스냅샷만 전송",
+  "external-opencode-zen": "OpenCode Zen · 합성 스냅샷만 전송",
   "internal-opencode": "로컬 OpenCode · 기기 내부 처리",
   deterministic: "호스팅된 결정론적 시연",
 };
@@ -39,13 +40,23 @@ export function mapPocRunResult(result: PocRunResultDto, request: string): Offic
     sections: createBriefSections(result),
     roleOutputs: result.roleOutputs.map(mapRoleOutput),
     workItems: result.brief.workBreakdown.map(mapWorkItem),
-    engine: {
-      label: result.execution.label,
-      dataRoute: result.execution.dataRoute,
-      dataRouteLabel: DATA_ROUTE_LABELS[result.execution.dataRoute],
-      fallbackReason: result.execution.fallbackReason,
-    },
+    engine: mapExecutionInfo(result.execution, result.roleOutputs.length),
     notices: result.notices,
+  };
+}
+
+export function mapExecutionInfo(
+  execution: PocRunResultDto["execution"],
+  roleOutputCount: number,
+): OfficeResult["engine"] {
+  return {
+    label: execution.label,
+    dataRoute: execution.dataRoute,
+    dataRouteLabel: DATA_ROUTE_LABELS[execution.dataRoute],
+    cliProcesses: execution.cliProcesses,
+    modelTurns: execution.modelTurns,
+    roleOutputCount,
+    fallbackReason: execution.fallbackReason,
   };
 }
 

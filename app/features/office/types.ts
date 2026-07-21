@@ -68,8 +68,11 @@ export interface OfficeWorkItem {
 
 export interface OfficeEngineInfo {
   label: string;
-  dataRoute: "external-openai" | "internal-opencode" | "deterministic";
+  dataRoute: "external-openai" | "external-opencode-zen" | "internal-opencode" | "deterministic";
   dataRouteLabel: string;
+  cliProcesses: number;
+  modelTurns: number;
+  roleOutputCount: number;
   fallbackReason?: string;
 }
 

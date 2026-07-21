@@ -1,7 +1,7 @@
 import { PocError } from "../domain/poc-errors";
 
 const WINDOW_MS = 60 * 60 * 1_000;
-const MAX_REQUESTS = 100;
+const MAX_REQUESTS = 10;
 const MAX_CLIENTS = 1_000;
 const clients = new Map<string, { count: number; resetAt: number }>();
 

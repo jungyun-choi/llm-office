@@ -13,7 +13,6 @@ const fallbackReasonSchema = z.enum([
 export const pocCapabilitiesSchema = z.object({
   apiVersion: z.literal("v1"),
   environment: z.enum(["local", "hosted"]),
-  bridgeToken: z.string().min(8).max(256).optional(),
   agentRuntime: z.object({
     enabled: z.boolean(),
     available: z.boolean(),
@@ -51,7 +50,12 @@ export const pocRunResultSchema = z.object({
   completedAt: z.string(),
   execution: z.object({
     kind: z.enum(["agent", "deterministic"]),
-    dataRoute: z.enum(["external-openai", "internal-opencode", "deterministic"]),
+    dataRoute: z.enum([
+      "external-openai",
+      "external-opencode-zen",
+      "internal-opencode",
+      "deterministic",
+    ]),
     label: z.string(),
     model: z.string().optional(),
     localOnly: z.boolean(),

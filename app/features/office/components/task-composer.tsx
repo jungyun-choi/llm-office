@@ -1,20 +1,22 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp, Info, LoaderCircle } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useForm } from "react-hook-form";
 
+import type { PocConnectionMode } from "../api/poc-client";
 import { OFFICE_COPY } from "../copy";
 import { officeRequestSchema } from "../office-request-schema";
 import type { OfficeRequestInput } from "../types";
 
 interface TaskComposerProps {
   isRunning: boolean;
+  connectionMode: PocConnectionMode;
   onRequest: (input: OfficeRequestInput) => boolean;
 }
 
-export function TaskComposer({ isRunning, onRequest }: TaskComposerProps) {
+export function TaskComposer({ isRunning, connectionMode, onRequest }: TaskComposerProps) {
   const form = useForm<OfficeRequestInput>({
     resolver: zodResolver(officeRequestSchema),
     defaultValues: { request: "" },
@@ -41,6 +43,10 @@ export function TaskComposer({ isRunning, onRequest }: TaskComposerProps) {
         </div>
         <small>{OFFICE_COPY.composer.shortcut}</small>
       </div>
+      <p className="poc-truth-note">
+        <Info size={14} aria-hidden="true" />
+        <span>{getPocTruthLabel(connectionMode)}</span>
+      </p>
       <div className={`task-composer__field ${error ? "has-error" : ""}`}>
         <textarea
           id="office-request"
@@ -73,4 +79,8 @@ export function TaskComposer({ isRunning, onRequest }: TaskComposerProps) {
       )}
     </form>
   );
+}
+
+export function getPocTruthLabel(connectionMode: PocConnectionMode): string {
+  return OFFICE_COPY.composer.pocTruth[connectionMode];
 }

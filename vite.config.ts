@@ -10,6 +10,7 @@ const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const localPocProxyFlag = process.env.AI_OFFICE_LOCAL_PROXY_ENABLED === "1" ? "1" : "0";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -44,6 +45,13 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    // API routes run inside the local Worker runtime, where arbitrary shell
+    // variables are not exposed through process.env. Inline this non-secret,
+    // development-only switch when Vite starts; the route also refuses to
+    // proxy when NODE_ENV is production.
+    define: {
+      "process.env.AI_OFFICE_LOCAL_PROXY_ENABLED": JSON.stringify(localPocProxyFlag),
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

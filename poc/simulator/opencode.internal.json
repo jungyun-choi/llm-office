@@ -1,0 +1,77 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+  "enabled_providers": ["ollama"],
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local Ollama",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "models": {
+        "qwen2.5-coder:3b": {
+          "name": "Qwen 2.5 Coder 3B (local)"
+        }
+      }
+    }
+  },
+  "share": "disabled",
+  "autoupdate": false,
+  "permission": {
+    "*": "deny",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "external_directory": "deny",
+    "edit": "deny",
+    "bash": "deny",
+    "webfetch": "deny",
+    "websearch": "deny"
+  },
+  "agent": {
+    "orchestrator": {
+      "description": "Coordinates read-only feature preparation for Synthetic FlashSim",
+      "mode": "primary",
+      "prompt": "{file:./prompts/orchestrator.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    },
+    "research": {
+      "description": "Finds evidence in the synthetic wiki, source, tests, and debug history",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/research.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    },
+    "framework": {
+      "description": "Maps a feature request onto the tiny simulator architecture",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/framework.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    },
+    "estimate": {
+      "description": "Produces a relative implementation estimate and risk breakdown",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/estimate.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    },
+    "test": {
+      "description": "Designs unit, regression, and performance tests without executing them",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/test.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    },
+    "git": {
+      "description": "Creates a vendor-neutral issue draft and never publishes it",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/git.md}",
+      "model": "{env:AI_OFFICE_OPENCODE_MODEL}",
+      "permission": { "task": "deny" }
+    }
+  }
+}

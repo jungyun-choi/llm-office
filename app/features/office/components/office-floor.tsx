@@ -1,5 +1,6 @@
 import { BriefcaseBusiness, FileText } from "lucide-react";
 
+import type { PocConnectionMode } from "../api/poc-client";
 import { OFFICE_COPY } from "../copy";
 import { DEMO_WORKFLOW, OFFICE_AGENTS } from "../office-data";
 import type { AgentFlowState, AgentId, OfficeAgent, OfficeRequestInput, OfficeResult, WorkflowStage, WorkflowStatus } from "../types";
@@ -8,6 +9,7 @@ import { CollaborationTable } from "./collaboration-table";
 import { ResultVault } from "./result-vault";
 import { TaskComposer } from "./task-composer";
 import { TransferPacket } from "./transfer-packet";
+import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 
 interface OfficeFloorProps {
   status: WorkflowStatus;
@@ -18,6 +20,8 @@ interface OfficeFloorProps {
   onResultOpen: (result: OfficeResult) => void;
   errorMessage: string | null;
   isResultArriving: boolean;
+  connectionMode: PocConnectionMode;
+  elapsedSeconds: number;
 }
 
 export function OfficeFloor(props: OfficeFloorProps) {
@@ -33,6 +37,8 @@ export function OfficeFloor(props: OfficeFloorProps) {
     activeWorkers,
     handoff,
   );
+  const progressHeading = getProgressHeading(props.status, props.currentStage);
+  const latestResult = props.results[0];
 
   return (
     <section
@@ -81,9 +87,25 @@ export function OfficeFloor(props: OfficeFloorProps) {
                 {stageNumber} / {DEMO_WORKFLOW.length}
               </span>
             )}
-            {props.currentStage && <strong>{props.currentStage.label}</strong>}
+            {progressHeading && <strong>{progressHeading}</strong>}
           </div>
           <p>{liveCaption}</p>
+          {props.status === "running" && (
+            <WorkflowElapsedStatus
+              connectionMode={props.connectionMode}
+              elapsedSeconds={props.elapsedSeconds}
+            />
+          )}
+          {props.status === "complete" && latestResult && (
+            <button
+              className="handoff-caption__result-button"
+              type="button"
+              onClick={() => props.onResultOpen(latestResult)}
+            >
+              <FileText size={15} aria-hidden="true" />
+              {OFFICE_COPY.progress.openResult}
+            </button>
+          )}
           {props.status === "running" && props.currentStage && (
             <div className="handoff-caption__mobile-details">
               <span className="handoff-caption__eyebrow">{OFFICE_COPY.floor.liveWorkLabel}</span>
@@ -123,7 +145,11 @@ export function OfficeFloor(props: OfficeFloorProps) {
         isReceiving={props.isResultArriving}
         onOpen={props.onResultOpen}
       />
-      <TaskComposer isRunning={props.status === "running"} onRequest={props.onRequest} />
+      <TaskComposer
+        isRunning={props.status === "running"}
+        connectionMode={props.connectionMode}
+        onRequest={props.onRequest}
+      />
     </section>
   );
 }
@@ -212,6 +238,12 @@ function getLiveCaption(
   if (status === "complete") return OFFICE_COPY.progress.complete;
   if (status === "running" && stage) return stage.description;
   return OFFICE_COPY.progress.idle;
+}
+
+function getProgressHeading(status: WorkflowStatus, stage: WorkflowStage | null): string | null {
+  if (status === "complete") return OFFICE_COPY.progress.completeTitle;
+  if (status === "error") return OFFICE_COPY.progress.errorTitle;
+  return stage?.label ?? null;
 }
 
 function getAccessibleProgressSummary(

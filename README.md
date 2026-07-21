@@ -67,29 +67,45 @@ npm run dev
 
 브라우저에서 출력된 로컬 주소를 열면 됩니다.
 
-### Codex로 실제 합성 POC 실행
+### OpenCode Zen 무료 모델로 합성 POC 실행
 
-8GB Mac에서는 로컬 모델을 기본으로 띄우지 않습니다. 대신 원격 Codex CLI는 작은 로컬 브리지에서 실행하고, 브라우저는 정규화된 결과만 받습니다.
+8GB Mac에서 로컬 LLM을 띄우지 않고 OpenCode 1.4.3의 Zen 무료 모델을 원격 호출합니다. POC 기본 모델은 실호출 검증을 통과한 `opencode/deepseek-v4-flash-free`입니다. 로컬 bridge는 loopback에만 바인딩되고, 모바일 브라우저는 웹서버의 same-origin API만 호출합니다.
+
+첫 실행 전 현재 무료 모델 카탈로그를 갱신합니다.
 
 ```bash
-# 터미널 1: 합성 데이터 전용 Codex bridge
+opencode models opencode
+```
+
+맥에서만 볼 때는 두 터미널에서 실행합니다.
+
+```bash
+# 터미널 1: 합성 데이터 전용 Zen bridge
 npm run poc:bridge
 
 # 터미널 2: 웹 사무실
-npm run dev
+npm run dev:poc -- -H 127.0.0.1
 ```
 
-Codex 인증이 없거나 브리지가 꺼져 있으면 화면은 자동으로 결정적 데모 모드로 동작합니다. `npm run poc:bridge:demo`를 사용하면 모델 호출 없이 로컬 브리지 계약만 시험할 수 있습니다.
+같은 tailnet의 모바일에서 볼 때는 `0.0.0.0`이 아닌 이 기기의 Tailscale IP에만 바인딩합니다.
 
-현재 POC의 여섯 자리는 서로 다른 책임을 가진 **논리 에이전트**입니다. 8GB 환경에서 메모리와 호출 비용을 줄이기 위해 요청 한 건을 Codex 프로세스 1개·모델 턴 1개로 처리하고, 한 번의 구조화 결과 안에 다섯 전문 역할과 오케스트레이터 결론을 담습니다. 사내 전환 시 `AgentRuntime` 구현만 실제 다중 에이전트 fan-out으로 바꿀 수 있으며 UI와 결과 계약은 유지됩니다.
+```bash
+npm run dev:poc -- -H "$(tailscale ip -4)"
+```
 
-> `poc:bridge`는 합성 저장소 내용을 외부 OpenAI 모델로 전송합니다. 실제 회사 요청, 코드, Wiki, 성능 수치, 경로 또는 식별자를 입력하지 마세요.
+모바일에서 `http://<맥의 Tailscale IP>:3000`을 엽니다. 웹서버를 직접 열어 두는 방식이므로 tailnet ACL에서 해당 모바일만 맥에 접근하도록 제한해야 합니다. bridge가 꺼지거나 Zen이 거절하면 로컬 UI는 안전하게 실패를 표시하고 호스팅 데모로 재전송하지 않습니다. 배포된 사이트는 계속 결정론적 합성 데모만 사용합니다.
+
+현재 POC의 여섯 자리는 서로 다른 책임을 가진 **논리 에이전트**입니다. 요청 한 건을 OpenCode 프로세스 1개·모델 턴 1개로 처리하고, 한 번의 구조화 결과에 다섯 전문 역할과 오케스트레이터 결론을 담습니다. UI의 업무 전달 애니메이션은 이 논리적 단계를 보여 줍니다. 사내 전환 시 `AgentRuntime` 구현만 실제 다중 에이전트 fan-out으로 바꿀 수 있으며 UI와 결과 계약은 유지됩니다.
+
+> Zen 무료 모델은 외부 서비스이며 요청이 미국에서 처리됩니다. 입력문 원문은 Zen으로 보내지 않고 서버 소유의 합성 시나리오로 치환하지만, 실제 회사 요청, 코드, Wiki, 성능 수치, 경로, 식별자를 입력하지 마세요. [OpenCode Zen 공식 문서](https://opencode.ai/docs/zen)에 따르면 무료 모델은 제공자의 모델 개선을 위해 데이터를 보관·사용할 수 있고 제공 기간도 한정적입니다.
+
+OpenCode 1.4.3의 무인증 무료 Zen 경로는 글로벌 XDG config/data/cache를 참조해야 합니다. bridge는 `HOME`, state, 작업 디렉터리를 매번 격리하고 모델·버전·합성 정책을 고정하지만, 글로벌 OpenCode 인증/세션 상태가 완전히 격리되지는 않습니다. `poc:bridge:zen`은 이 제약을 `synthetic-only`로 명시적으로 수용한 로컬 POC에서만 실행합니다. 2026-08-21 전에 전용 계정/상태 격리 또는 사내 OpenCode runtime으로 교체합니다.
 
 ### 교체 지점
 
 | 지금 POC | 사내 전환 시 교체 | UI 변경 |
 |---|---|---|
-| `CodexCliRuntime` | `OpenCodeCliRuntime` + 사내 LLM 모델 | 없음 |
+| `OpenCodeCliRuntime` + Zen 무료 모델 | `OpenCodeCliRuntime` + 사내 LLM 모델 | 없음 |
 | `SyntheticSimulatorSource` | 승인된 Wiki/Git/Simulator connector | 없음 |
 | 결과 JSON schema | 같은 버전의 사내 artifact contract | 없음 |
 

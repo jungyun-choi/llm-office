@@ -14,7 +14,24 @@ const SNAPSHOT_FILES = [
   "src/simulator.py",
   "tests/test_simulator.py",
 ] as const;
+const RUNTIME_POLICY_FILES = [
+  "AGENTS.md",
+  "contracts/poc-output.schema.json",
+  "opencode.json",
+  "opencode.internal.json",
+  "prompts/orchestrator.md",
+  "prompts/research.md",
+  "prompts/framework.md",
+  "prompts/estimate.md",
+  "prompts/test.md",
+  "prompts/git.md",
+] as const;
 const MAX_SNAPSHOT_BYTES = 64 * 1_024;
+const MAX_POLICY_BYTES = 32 * 1_024;
+const EXPECTED_SNAPSHOT_DIGEST =
+  "706661bd0c6e10a5816b2faefcfcc63b7005382d380254fee8cb0cf5c1042f56";
+const EXPECTED_POLICY_DIGEST =
+  "9169a0a1e0b7411c263cc0121a321ac42e3972ac9645948511900cdb0b775381";
 
 function isInside(parent: string, candidate: string): boolean {
   const relative = path.relative(parent, candidate);
@@ -37,8 +54,12 @@ export class SyntheticSimulatorSource implements SimulatorSource {
       throw new PocRunnerError("unavailable");
     }
 
+    await assertRuntimePolicyAssets(workingDirectory);
     const snapshot = await createSnapshot(workingDirectory);
     const snapshotDigest = await digest(snapshot);
+    if (snapshotDigest !== EXPECTED_SNAPSHOT_DIGEST) {
+      throw new PocRunnerError("unavailable");
+    }
 
     return {
       sourceId: this.id,
@@ -53,11 +74,30 @@ export class SyntheticSimulatorSource implements SimulatorSource {
 }
 
 async function createSnapshot(workingDirectory: string): Promise<string> {
+  return createFileBundle(workingDirectory, SNAPSHOT_FILES, MAX_SNAPSHOT_BYTES);
+}
+
+async function assertRuntimePolicyAssets(workingDirectory: string): Promise<void> {
+  const bundle = await createFileBundle(
+    workingDirectory,
+    RUNTIME_POLICY_FILES,
+    MAX_POLICY_BYTES,
+  );
+  if (await digest(bundle) !== EXPECTED_POLICY_DIGEST) {
+    throw new PocRunnerError("unavailable");
+  }
+}
+
+async function createFileBundle(
+  workingDirectory: string,
+  relativePaths: readonly string[],
+  maxBytes: number,
+): Promise<string> {
   const { lstat, readFile, realpath } = await import("node:fs/promises");
   const sections: string[] = [];
   let totalBytes = 0;
 
-  for (const relativePath of SNAPSHOT_FILES) {
+  for (const relativePath of relativePaths) {
     const candidate = path.join(workingDirectory, relativePath);
     const resolved = await realpath(candidate);
     const fileStat = await lstat(candidate);
@@ -66,7 +106,7 @@ async function createSnapshot(workingDirectory: string): Promise<string> {
     }
     const content = await readFile(resolved, "utf8");
     totalBytes += Buffer.byteLength(content, "utf8");
-    if (totalBytes > MAX_SNAPSHOT_BYTES) throw new PocRunnerError("unavailable");
+    if (totalBytes > maxBytes) throw new PocRunnerError("unavailable");
     sections.push(`--- ${relativePath} ---\n${content}`);
   }
   return sections.join("\n\n");

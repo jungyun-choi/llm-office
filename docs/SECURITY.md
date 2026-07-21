@@ -142,17 +142,21 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 - `C2/C3` 화면은 `Cache-Control: no-store`를 사용하고 local storage, URL query, browser history와 client-side telemetry에 내용을 저장하지 않는다.
 - CSRF 방어, strict CSP, output encoding과 same-site cookie를 적용한다.
 
-### 4.5 외부 Codex 합성 POC 경계
+### 4.5 외부 OpenCode Zen 합성 POC 경계
 
-로컬 Codex bridge는 제품 통합이 아니라 합성 POC 전용 예외 경로다.
+로컬 OpenCode Zen bridge는 제품 통합이 아니라 2026-08-21까지 사용하는 합성 POC 전용 예외 경로다. 다음 잔여 위험을 수용하지 못하면 bridge를 실행하지 않는다.
 
-- 기본값은 비활성화이며 사용자가 로컬 개발 환경에서 명시적으로 선택해야 한다.
-- `SyntheticSimulatorSource`의 canonical root와 결과 schema가 정확히 일치할 때만 실행한다.
-- 요청과 allowlist snapshot은 argv, URL, 로그 또는 저장소에 남기지 않고 stdin으로만 전달한다.
-- Codex CLI 버전을 고정하고 user config, project rules, plugin, MCP, browser, shell, multi-agent 및 쓰기 도구를 fail-closed로 비활성화한다.
-- bridge는 loopback에만 bind하고 exact Origin/Host, 일회성 고엔트로피 token, 본문 크기, 단일 실행과 timeout을 검사한다.
-- 회사 요청, 코드, Wiki, 경로, 성능 수치 또는 식별자는 이 경로에 절대 입력하지 않는다.
-- 실제 사내 source를 연결하기 전에는 별도 OS identity/container, 내부 LLM endpoint, service credential과 egress deny 정책으로 교체한다.
+- 기본값은 비활성화이며 `AI_OFFICE_ZEN_SHARED_STATE_ACK=synthetic-only`를 포함한 전용 명령으로만 활성화한다.
+- `SyntheticSimulatorSource`의 canonical root, 정책 파일과 결과 schema digest가 정확히 일치할 때만 실행한다.
+- 사용자의 입력 원문은 외부 모델에 전달하지 않는다. 결정론적 코드가 미리 정의한 `Synthetic FlashSim` 기능 시나리오 중 하나로 치환하며, 그 시나리오와 합성 snapshot만 임시 작업 공간에 복사한다.
+- OpenCode CLI 버전, 실행 파일 소유권, Zen endpoint, 무료 모델 allowlist와 모델 catalog를 검증한다. project config, plugin, MCP, tool, shell, browser, LSP와 파일 쓰기는 fail-closed로 비활성화한다.
+- bridge는 `127.0.0.1:4317`에만 bind하고 브라우저 `Origin`을 모두 거부한다. 웹서버가 loopback에서만 임시 bearer token을 받아 same-origin `/api/v1/poc/*`로 중계한다.
+- token discovery는 동일 OS 계정의 로컬 프로세스를 신뢰하며 Unix socket 또는 상호 인증을 사용하지 않는다. 따라서 악성 로컬 프로세스나 port 선점 공격은 이 POC의 수용된 잔여 위험이다.
+- 모바일용 웹서버에는 별도 사용자 인증이 없다. `0.0.0.0`이 아니라 정확한 Tailscale IP에 bind하고 tailnet ACL로 허용 모바일을 제한한다. 인터넷, 공용 Wi-Fi 또는 회사 네트워크에 직접 공개하지 않는다.
+- OpenCode 1.4.3의 무인증 무료 Zen 모델 검색 제약 때문에 실제 사용자 XDG config/data/cache를 읽는다. `HOME`, state, temp와 작업 디렉터리는 격리하지만 글로벌 인증·cache·session 상태는 완전히 격리되지 않으며, bridge를 같은 OS 계정으로 실행하는 모든 로컬 프로세스를 신뢰한다.
+- 요청은 전송 전 시간당 10건, 동시 실행 1건, 대기열 0건, 단일 모델 시도와 timeout으로 제한한다. 실패한 요청을 다른 provider 또는 합성 데모로 자동 재전송하지 않는다.
+- Zen 무료 모델은 외부·미국 처리 경로이며 데이터 보존·모델 개선 조건이 적용될 수 있다. 회사 요청, 코드, Wiki, 경로, 실제 성능 수치, 식별자와 secret은 UI에도 입력하지 않는다.
+- 실제 사내 source를 연결하기 전 전용 OS identity 또는 container, 사내 OpenCode/LLM endpoint, SSO, service credential, Unix socket/mTLS와 egress deny 정책으로 교체해야 한다. 이 예외는 회사 데이터나 production 승인으로 간주하지 않는다.
 
 ## 5. 원문 비반출 처리 모델
 

@@ -2,71 +2,79 @@ import {
   pocCapabilitiesSchema,
   pocErrorResponseSchema,
   pocRunResultSchema,
+  type PocCapabilitiesDto,
   type PocRunResultDto,
 } from "./poc-contract";
 
-export type PocConnectionMode = "checking" | "codex" | "opencode" | "demo";
+export type PocConnectionMode = "checking" | "codex" | "opencode" | "demo" | "disconnected";
 
 export interface PocEndpoint {
   kind: "local" | "hosted";
   baseUrl: string;
   connectionMode: PocConnectionMode;
   requestTimeoutMs: number;
-  bridgeToken?: string;
 }
 
-export interface PocRunOutcome {
-  result: PocRunResultDto;
-  usedHostedFallback: boolean;
-}
-
-const LOCAL_POC_BASE = "http://127.0.0.1:4317/api/v1/poc";
-const HOSTED_POC_BASE = "/api/v1/poc";
+const POC_API_BASE = "/api/v1/poc";
+const CAPABILITIES_REQUEST_TIMEOUT_MS = 2_500;
 const HOSTED_REQUEST_TIMEOUT_MS = 15_000;
 
 export function hostedPocEndpoint(): PocEndpoint {
   return {
     kind: "hosted",
-    baseUrl: HOSTED_POC_BASE,
+    baseUrl: POC_API_BASE,
     connectionMode: "demo",
     requestTimeoutMs: HOSTED_REQUEST_TIMEOUT_MS,
   };
 }
 
-export async function probeLocalPocEndpoint(signal: AbortSignal): Promise<PocEndpoint> {
-  const response = await fetch(`${LOCAL_POC_BASE}/capabilities`, {
-    method: "GET",
-    cache: "no-store",
-    credentials: "omit",
-    signal,
-  });
-  if (!response.ok) return hostedPocEndpoint();
-  const parsed = pocCapabilitiesSchema.safeParse(await readJson(response));
-  if (!parsed.success || !parsed.data.agentRuntime.enabled || !parsed.data.agentRuntime.available) {
-    return hostedPocEndpoint();
+export function resolvePocEndpoint(capabilities: PocCapabilitiesDto): PocEndpoint {
+  if (capabilities.environment === "hosted") return hostedPocEndpoint();
+  if (!capabilities.agentRuntime.enabled || !capabilities.agentRuntime.available) {
+    throw new PocClientError(
+      "LOCAL_RUNTIME_UNAVAILABLE",
+      "로컬 POC 실행기가 준비되지 않았습니다. PC의 실행기 상태를 확인해 주세요.",
+    );
   }
   return {
     kind: "local",
-    baseUrl: LOCAL_POC_BASE,
-    connectionMode: runtimeMode(parsed.data.agentRuntime.label),
-    requestTimeoutMs: Math.min(190_000, parsed.data.agentRuntime.timeoutMs + 8_000),
-    bridgeToken: parsed.data.bridgeToken,
+    baseUrl: POC_API_BASE,
+    connectionMode: runtimeMode(capabilities.agentRuntime.label),
+    requestTimeoutMs: Math.min(190_000, capabilities.agentRuntime.timeoutMs + 8_000),
   };
+}
+
+export async function probePocEndpoint(signal: AbortSignal): Promise<PocEndpoint> {
+  let response: Response;
+  try {
+    response = await fetchWithDeadline(`${POC_API_BASE}/capabilities`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+    }, signal, CAPABILITIES_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (isPocAbortError(error) || error instanceof PocClientError) throw error;
+    throw new PocClientError(
+      "CAPABILITIES_UNAVAILABLE",
+      "POC 실행 환경을 확인하지 못했습니다. 연결 상태를 확인해 주세요.",
+    );
+  }
+  const payload = await readJson(response);
+  if (!response.ok) throw createResponseError(response.status, payload);
+  const parsed = pocCapabilitiesSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new PocClientError("INVALID_CAPABILITIES", "POC 실행 환경 응답을 확인하지 못했습니다.");
+  }
+  return resolvePocEndpoint(parsed.data);
 }
 
 export async function runPocRequest(
   endpoint: PocEndpoint,
   prompt: string,
   signal: AbortSignal,
-): Promise<PocRunOutcome> {
+): Promise<PocRunResultDto> {
   const requestIds = createRequestIds();
-  try {
-    return { result: await postRun(endpoint, prompt, requestIds, signal), usedHostedFallback: false };
-  } catch (error) {
-    if (signal.aborted || endpoint.kind === "hosted") throw error;
-    const result = await postRun(hostedPocEndpoint(), prompt, requestIds, signal);
-    return { result, usedHostedFallback: true };
-  }
+  return postRun(endpoint, prompt, requestIds, signal);
 }
 
 interface RequestIds {
@@ -85,13 +93,10 @@ async function postRun(
     "Idempotency-Key": requestIds.idempotencyKey,
     "X-Correlation-Id": requestIds.correlationId,
   });
-  if (endpoint.kind === "local" && endpoint.bridgeToken) {
-    headers.set("X-AI-Office-Bridge-Token", endpoint.bridgeToken);
-  }
   const response = await fetchWithDeadline(`${endpoint.baseUrl}/runs`, {
     method: "POST",
     cache: "no-store",
-    credentials: endpoint.kind === "local" ? "omit" : "same-origin",
+    credentials: "same-origin",
     headers,
     body: JSON.stringify({ prompt, executionMode: "auto" }),
   }, parentSignal, endpoint.requestTimeoutMs);
@@ -129,7 +134,7 @@ async function fetchWithDeadline(
   }
 }
 
-class PocClientError extends Error {
+export class PocClientError extends Error {
   constructor(readonly code: string, message: string, readonly status?: number) {
     super(message);
     this.name = "PocClientError";

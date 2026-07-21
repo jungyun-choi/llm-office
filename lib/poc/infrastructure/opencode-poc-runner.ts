@@ -1,4 +1,5 @@
 import path from "node:path";
+import os from "node:os";
 import { constants as fsConstants } from "node:fs";
 import { PocRunnerError } from "../domain/poc-errors";
 import type {
@@ -8,16 +9,20 @@ import type {
 } from "../application/ports/agent-runtime";
 import { getOpenCodeRuntimeConfig } from "./opencode-runtime-config";
 import { parseOpenCodeOutput } from "./opencode-output-parser";
-import { executeOpenCodeProcess } from "./opencode-process";
+import {
+  executeOpenCodeProcess,
+  hasSafeZenGlobalConfig,
+  hasUsableModelCatalog,
+} from "./opencode-process";
+import { toSyntheticFeatureRequest } from "./synthetic-feature-request";
+import { assertSyntheticSourceBoundary } from "./synthetic-source-boundary";
+import { executeSecureCli } from "./secure-cli-process";
 
 const EXECUTABLE_NAME = "opencode";
+const REQUIRED_OPENCODE_VERSION = "1.4.3";
 const AVAILABILITY_TTL_MS = 30_000;
+const RUNTIME_DIRECTORY_PREFIX = "ai-office-flashsim-";
 let availabilityCache: { checkedAt: number; executable?: string } | undefined;
-
-function isInside(parent: string, candidate: string): boolean {
-  const relative = path.relative(parent, candidate);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
 
 async function executableCandidates(): Promise<string[]> {
   const configured = process.env.AI_OFFICE_OPENCODE_BIN;
@@ -48,7 +53,13 @@ async function findExecutableWithoutCache(): Promise<string | undefined> {
     try {
       await access(candidate, fsConstants.X_OK);
       const resolved = await realpath(candidate);
-      if (path.basename(resolved) === EXECUTABLE_NAME && (await stat(resolved)).isFile()) {
+      const executable = await stat(resolved);
+      if (
+        path.basename(resolved) === EXECUTABLE_NAME &&
+        executable.isFile() &&
+        isTrustedExecutable(executable) &&
+        await hasRequiredVersion(resolved)
+      ) {
         return resolved;
       }
     } catch {
@@ -58,36 +69,60 @@ async function findExecutableWithoutCache(): Promise<string | undefined> {
   return undefined;
 }
 
-async function prepareRuntimeDirectory(repositoryRoot: string): Promise<string> {
-  const { lstat, mkdir, mkdtemp, realpath } = await import("node:fs/promises");
-  const resolvedRepository = await realpath(repositoryRoot);
-  if (resolvedRepository !== repositoryRoot) {
-    throw new PocRunnerError("unavailable");
-  }
-  const runtimeRoot = path.join(resolvedRepository, ".runtime");
-  await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
-  if ((await lstat(runtimeRoot)).isSymbolicLink()) {
-    throw new PocRunnerError("unavailable");
-  }
-  const runtimeDirectory = await mkdtemp(path.join(runtimeRoot, "run-"));
+function isTrustedExecutable(file: { uid: number; mode: number }): boolean {
+  const ownedByProcess = typeof process.getuid !== "function" || file.uid === process.getuid();
+  return ownedByProcess && (file.mode & 0o022) === 0;
+}
+
+async function hasRequiredVersion(executable: string): Promise<boolean> {
+  const result = await executeSecureCli({
+    executable,
+    args: ["--version"],
+    cwd: os.tmpdir(),
+    env: {
+      PATH: path.dirname(executable),
+      HOME: os.tmpdir(),
+      LANG: "C.UTF-8",
+      NO_COLOR: "1",
+    },
+    timeoutMs: 5_000,
+    stdoutLimitBytes: 8_192,
+    stderrLimitBytes: 8_192,
+  });
+  return result.exitCode === 0 && result.stdout.trim() === REQUIRED_OPENCODE_VERSION;
+}
+
+async function prepareRuntimeDirectory(): Promise<string> {
+  const { chmod, mkdir, mkdtemp, realpath } = await import("node:fs/promises");
+  const runtimeRoot = await realpath(os.tmpdir());
+  const runtimeDirectory = await mkdtemp(path.join(runtimeRoot, RUNTIME_DIRECTORY_PREFIX));
+  await chmod(runtimeDirectory, 0o700);
   await mkdir(path.join(runtimeDirectory, "tmp"), { mode: 0o700 });
-  if (!isInside(runtimeRoot, runtimeDirectory)) {
+  if (path.dirname(runtimeDirectory) !== runtimeRoot) {
     throw new PocRunnerError("unavailable");
   }
   return runtimeDirectory;
 }
 
 async function removeRuntimeDirectory(runtimeDirectory: string): Promise<void> {
-  const { rm } = await import("node:fs/promises");
-  const expectedRoot = path.resolve(process.cwd(), "poc", "simulator", ".runtime");
-  if (isInside(expectedRoot, runtimeDirectory) && runtimeDirectory !== expectedRoot) {
+  const { realpath, rm } = await import("node:fs/promises");
+  const runtimeRoot = await realpath(os.tmpdir());
+  const isOwnedDirectory =
+    path.dirname(runtimeDirectory) === runtimeRoot &&
+    path.basename(runtimeDirectory).startsWith(RUNTIME_DIRECTORY_PREFIX);
+  if (isOwnedDirectory) {
     await rm(runtimeDirectory, { recursive: true, force: true });
   }
 }
 
-function buildOrchestratorPrompt(request: AgentRuntimeRequest): string {
+function buildOrchestratorPrompt(
+  request: AgentRuntimeRequest,
+  useSyntheticScenario: boolean,
+): string {
   const requestData = JSON.stringify({
-    featureRequest: request.featureRequest,
+    featureRequest: useSyntheticScenario
+      ? toSyntheticFeatureRequest(request.featureRequest)
+      : request.featureRequest,
     sourceId: request.source.sourceId,
     sourceDigest: request.source.snapshotDigest,
     repositorySnapshot: request.source.snapshot,
@@ -104,22 +139,25 @@ function buildOrchestratorPrompt(request: AgentRuntimeRequest): string {
 export async function canRunOpenCode(): Promise<boolean> {
   const config = getOpenCodeRuntimeConfig();
   if (!config.enabled) return false;
+  if (!(await hasUsableModelCatalog(config))) return false;
+  if (!(await hasSafeZenGlobalConfig(config))) return false;
   return Boolean(await findOpenCodeExecutable());
 }
 
 async function runOpenCodePoc(request: AgentRuntimeRequest): Promise<AgentRuntimeResult> {
+  await assertSyntheticSourceBoundary(request.source);
   const config = getOpenCodeRuntimeConfig();
   if (!config.enabled) throw new PocRunnerError("unavailable");
   const executable = await findOpenCodeExecutable();
   if (!executable) throw new PocRunnerError("unavailable");
-  const runtimeDirectory = await prepareRuntimeDirectory(config.repositoryRoot);
+  const runtimeDirectory = await prepareRuntimeDirectory();
 
   try {
     const result = await executeOpenCodeProcess(
       executable,
       runtimeDirectory,
       config,
-      buildOrchestratorPrompt(request),
+      buildOrchestratorPrompt(request, config.profile === "zen"),
       request.signal,
     );
     if (result.aborted) throw new PocRunnerError("aborted");
@@ -129,9 +167,9 @@ async function runOpenCodePoc(request: AgentRuntimeRequest): Promise<AgentRuntim
     }
     return {
       runtimeId: "opencode-cli",
-      runtimeLabel: "OpenCode 에이전트 런타임",
+      runtimeLabel: config.runtimeLabel,
       kind: "agent",
-      dataRoute: "internal-opencode",
+      dataRoute: config.dataRoute,
       model: config.model,
       output: parseOpenCodeOutput(result.stdout),
       metrics: { cliProcesses: 1, modelTurns: 1, durationMs: result.durationMs },
@@ -143,7 +181,10 @@ async function runOpenCodePoc(request: AgentRuntimeRequest): Promise<AgentRuntim
 
 export class OpenCodeCliRuntime implements AgentRuntime {
   readonly id = "opencode-cli";
-  readonly label = "OpenCode 에이전트 런타임";
+
+  get label(): string {
+    return getOpenCodeRuntimeConfig().runtimeLabel;
+  }
 
   async isAvailable(): Promise<boolean> {
     return canRunOpenCode();

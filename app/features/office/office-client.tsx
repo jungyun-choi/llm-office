@@ -13,13 +13,16 @@ export function OfficeClient() {
   const transport = usePocTransport();
   const workflow = useOfficeWorkflow({
     resolveEndpoint: transport.resolveEndpoint,
-    markHostedFallback: transport.markHostedFallback,
   });
 
   return (
     <div className="office-app">
       <a className="skip-link" href="#main-content">{OFFICE_COPY.accessibility.skipToMain}</a>
-      <OfficeHeader currentTime={currentTime} connectionMode={transport.connectionMode} />
+      <OfficeHeader
+        currentTime={currentTime}
+        connectionMode={transport.connectionMode}
+        onRetryConnection={transport.retryConnection}
+      />
       <main className="office-main" id="main-content">
         <OfficeFloor
           status={workflow.status}
@@ -30,6 +33,8 @@ export function OfficeClient() {
           onResultOpen={workflow.openResult}
           errorMessage={workflow.errorMessage}
           isResultArriving={workflow.isResultArriving}
+          connectionMode={transport.connectionMode}
+          elapsedSeconds={workflow.elapsedSeconds}
         />
       </main>
       <ResultDrawer result={workflow.selectedResult} onClose={workflow.closeResult} />

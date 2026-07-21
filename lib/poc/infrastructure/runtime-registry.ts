@@ -1,6 +1,7 @@
 import type { AgentRuntime } from "../application/ports/agent-runtime";
 import { CodexCliRuntime } from "./codex-cli-runtime";
 import { OpenCodeCliRuntime } from "./opencode-poc-runner";
+import { getOpenCodeRuntimeConfig } from "./opencode-runtime-config";
 
 export function isLocalRunnerEnabled(): boolean {
   const runtime = process.env.AI_OFFICE_AGENT_RUNTIME;
@@ -25,4 +26,10 @@ export function getAgentTimeoutMs(): number {
   const parsed = Number(process.env.AI_OFFICE_AGENT_TIMEOUT_MS ?? 120_000);
   if (!Number.isFinite(parsed)) return 120_000;
   return Math.min(180_000, Math.max(30_000, Math.round(parsed)));
+}
+
+export function configuredRuntimeUsesExternalModel(): boolean {
+  if (process.env.AI_OFFICE_AGENT_RUNTIME === "codex") return true;
+  if (process.env.AI_OFFICE_AGENT_RUNTIME !== "opencode") return false;
+  return getOpenCodeRuntimeConfig().dataRoute === "external-opencode-zen";
 }

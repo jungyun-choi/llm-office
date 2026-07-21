@@ -7,19 +7,17 @@ const HOST = "127.0.0.1";
 const PORT = parsePort(process.env.AI_OFFICE_BRIDGE_PORT);
 const MAX_BODY_BYTES = 8 * 1_024;
 const BRIDGE_TOKEN = randomBytes(32).toString("base64url");
-const ALLOWED_ORIGINS = allowedOrigins(process.env.AI_OFFICE_UI_ORIGIN);
 
 const server = createServer(async (request, response) => {
   const origin = request.headers.origin;
   if (!isLoopbackRequest(request) || !isAllowedHost(request.headers.host)) {
-    sendJson(response, Response.json({ error: { code: "LOOPBACK_ONLY" } }, { status: 403 }));
+    sendJson(response, bridgeError("LOOPBACK_ONLY", 403));
     return;
   }
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
-    sendJson(response, Response.json({ error: { code: "ORIGIN_DENIED" } }, { status: 403 }));
+  if (origin) {
+    sendJson(response, bridgeError("ORIGIN_DENIED", 403));
     return;
   }
-  applyCors(response, origin);
   if (request.method === "OPTIONS") {
     response.writeHead(204).end();
     return;
@@ -32,25 +30,24 @@ const server = createServer(async (request, response) => {
   }
   if (request.method === "POST" && pathname === "/api/v1/poc/runs") {
     if (!hasValidBridgeToken(request)) {
-      sendJson(response, Response.json({ error: { code: "BRIDGE_TOKEN_REQUIRED" } }, { status: 401 }));
+      sendJson(response, bridgeError("BRIDGE_TOKEN_REQUIRED", 401));
       return;
     }
-    await handleRun(request, response, origin);
+    await handleRun(request, response);
     return;
   }
-  sendJson(response, Response.json({ error: { code: "NOT_FOUND" } }, { status: 404 }));
+  sendJson(response, bridgeError("NOT_FOUND", 404));
 });
 
 server.requestTimeout = 190_000;
 server.headersTimeout = 10_000;
 server.listen(PORT, HOST, () => {
-  process.stdout.write(`AI Office POC bridge: http://${HOST}:${PORT}\n`);
+  process.stdout.write(`AI Office synthetic POC bridge: http://${HOST}:${PORT}\n`);
 });
 
 async function handleRun(
   incoming: IncomingMessage,
   outgoing: ServerResponse,
-  origin: string | undefined,
 ): Promise<void> {
   try {
     const body = await readBody(incoming);
@@ -62,7 +59,7 @@ async function handleRun(
     outgoing.once("close", abortIfOpen);
     const request = new Request(`http://${HOST}:${PORT}/api/v1/poc/runs`, {
       method: "POST",
-      headers: bridgeHeaders(incoming, origin),
+      headers: bridgeHeaders(incoming),
       body: body.toString("utf8"),
       signal: controller.signal,
     });
@@ -112,12 +109,11 @@ function readBody(request: IncomingMessage): Promise<Buffer> {
 
 class PayloadTooLargeError extends Error {}
 
-function bridgeHeaders(request: IncomingMessage, origin: string | undefined): Headers {
+function bridgeHeaders(request: IncomingMessage): Headers {
   const headers = new Headers({
     "content-type": request.headers["content-type"] ?? "",
     "cf-connecting-ip": "local-bridge",
   });
-  if (origin) headers.set("origin", origin);
   for (const name of ["idempotency-key", "x-correlation-id"] as const) {
     const value = request.headers[name];
     if (typeof value === "string") headers.set(name, value);
@@ -132,17 +128,6 @@ async function sendJson(response: ServerResponse, webResponse: Response): Promis
   const headers = Object.fromEntries(webResponse.headers.entries());
   response.writeHead(webResponse.status, headers);
   response.end(Buffer.from(await webResponse.arrayBuffer()));
-}
-
-function applyCors(response: ServerResponse, origin: string | undefined): void {
-  if (!origin) return;
-  response.setHeader("access-control-allow-origin", origin);
-  response.setHeader("vary", "Origin");
-  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader(
-    "access-control-allow-headers",
-    "Content-Type,Idempotency-Key,X-Correlation-Id,X-AI-Office-Bridge-Token",
-  );
 }
 
 function parsePort(value: string | undefined): number {
@@ -170,19 +155,10 @@ function isAllowedHost(host: string | undefined): boolean {
   return host === `${HOST}:${PORT}` || host === `localhost:${PORT}`;
 }
 
-function allowedOrigins(configured: string | undefined): Set<string> {
-  const origins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-  for (const candidate of (configured ?? "").split(",")) {
-    const value = candidate.trim();
-    if (!value) continue;
-    try {
-      const url = new URL(value);
-      if (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
-        origins.add(url.origin);
-      }
-    } catch {
-      // Invalid configured origins are ignored and never widen the allowlist.
-    }
-  }
-  return origins;
+function bridgeError(code: string, status: number): Response {
+  return jsonResponse(
+    { error: { code, message: "Local synthetic POC bridge rejected the request." } },
+    status,
+    crypto.randomUUID(),
+  );
 }

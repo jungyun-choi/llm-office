@@ -89,17 +89,38 @@ Office UI
    │ normalized request / progress / result
    ▼
 POC Application Service
-   ├─ AgentRuntime      ─ CodexCli | OpenCodeCli | Deterministic
+   ├─ AgentRuntime      ─ OpenCodeCli | CodexCli | Deterministic
    └─ SimulatorSource  ─ Synthetic | Internal Connector
 ```
 
 - `AgentRuntime`은 정규화된 요청과 source snapshot을 받아 버전이 고정된 결과 schema를 반환한다.
 - `SimulatorSource`는 허용된 자료만 최소 snapshot과 digest로 만들며, 모델이 임의로 파일 시스템을 탐색하지 않게 한다.
 - UI 애니메이션은 모델 고유 event나 token stream이 아니라 `accepted`, 역할별 handoff, `completed` 같은 coarse event만 사용한다.
-- 외부 Codex runtime은 합성 source와만 결합할 수 있다. 실제 사내 source는 사내 OpenCode/LLM runtime과 동일한 신뢰 영역에서만 결합한다.
+- 외부 OpenCode Zen 또는 Codex runtime은 합성 source와만 결합할 수 있다. 실제 사내 source는 사내 OpenCode/LLM runtime과 동일한 신뢰 영역에서만 결합한다.
 - Git adapter는 분석 결과를 초안으로 바꿀 뿐이며, publish 권한과 사람 승인은 별도 port로 유지한다.
 
-이 경계 덕분에 POC에서 `CodexCliRuntime + SyntheticSimulatorSource`를 사용한 뒤 UI를 바꾸지 않고 `OpenCodeCliRuntime + InternalRepoSource`로 전환할 수 있다.
+이 경계 덕분에 POC에서 `OpenCodeCliRuntime(Zen) + SyntheticSimulatorSource`를 사용한 뒤 UI를 바꾸지 않고 `OpenCodeCliRuntime(사내 모델) + InternalRepoSource`로 전환할 수 있다.
+
+### 3.3 현재 로컬 Zen POC 토폴로지
+
+```text
+모바일 브라우저
+  │ Tailscale, http://<정확한 Mac tailnet IP>:3000
+  ▼
+로컬 웹 사무실 / same-origin API
+  │ server-side proxy, token은 브라우저에 노출하지 않음
+  ▼
+127.0.0.1:4317 Zen bridge
+  │ raw 사용자 입력 → 서버 소유 Synthetic 시나리오로 치환
+  ▼
+OpenCode 1.4.3 ── HTTPS ── OpenCode Zen 무료 모델
+```
+
+- 웹서버는 `AI_OFFICE_LOCAL_PROXY_ENABLED=1`인 개발 실행에서만 bridge를 사용한다. 호스팅 빌드는 결정론적 합성 데모만 반환한다.
+- bridge가 없거나 Zen 호출이 실패하면 명시적인 `5xx` 오류로 닫히며 호스팅 데모, 다른 모델 또는 provider로 fallback하지 않는다.
+- POC의 여섯 좌석은 업무 책임과 handoff를 표현하는 논리 에이전트다. 실제 실행은 요청당 OpenCode 프로세스 1개와 모델 턴 1개이며, 구조화 결과에 다섯 전문 역할과 오케스트레이터 결론을 함께 담는다.
+- 사내 전환 때 `AgentRuntime` 내부를 orchestrator 1개와 병렬 subagent fan-out으로 바꾸되, UI의 coarse progress event와 결과 schema는 유지한다.
+- 보안 예외와 만료 조건은 [SECURITY.md의 외부 OpenCode Zen 합성 POC 경계](./SECURITY.md#45-외부-opencode-zen-합성-poc-경계)를 따른다.
 
 ## 4. 배포 모드
 

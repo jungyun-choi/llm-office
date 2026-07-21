@@ -3,6 +3,7 @@ import type { PocCapabilities } from "../domain/poc-types";
 import {
   getAgentTimeoutMs,
   getConfiguredAgentRuntime,
+  configuredRuntimeUsesExternalModel,
   isLocalRunnerEnabled,
 } from "../infrastructure/runtime-registry";
 import { enforcePocRateLimit } from "./rate-limiter";
@@ -42,8 +43,7 @@ export async function localCapabilities(bridgeToken?: string): Promise<PocCapabi
     dataPolicy: {
       syntheticRepositoryOnly: true,
       acceptsCompanyData: false,
-      externalModelReceivesSyntheticSnapshot:
-        process.env.AI_OFFICE_AGENT_RUNTIME === "codex",
+      externalModelReceivesSyntheticSnapshot: configuredRuntimeUsesExternalModel(),
     },
     ...(bridgeToken ? { bridgeToken } : {}),
   };

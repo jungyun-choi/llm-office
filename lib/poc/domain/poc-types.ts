@@ -25,7 +25,11 @@ export interface PocRunResult extends PocModelOutput {
   completedAt: string;
   execution: {
     kind: "agent" | "deterministic";
-    dataRoute: "external-openai" | "internal-opencode" | "deterministic";
+    dataRoute:
+      | "external-openai"
+      | "external-opencode-zen"
+      | "internal-opencode"
+      | "deterministic";
     label: string;
     model?: string;
     localOnly: boolean;

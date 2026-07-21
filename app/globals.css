@@ -137,6 +137,10 @@ textarea:focus-visible {
   align-items: center;
 }
 
+.connection-status-announcer {
+  display: inline-flex;
+}
+
 .office-brand {
   gap: 10px;
 }
@@ -224,6 +228,33 @@ textarea:focus-visible {
 .connection-status[data-mode="checking"] .connection-status__dot {
   color: var(--office-ink-faint);
   background: var(--office-ink-faint);
+}
+
+.connection-status[data-mode="disconnected"] {
+  border-color: rgb(186 94 87 / 32%);
+  color: #934842;
+  cursor: pointer;
+}
+
+.connection-status[data-mode="disconnected"] svg {
+  color: #a94e49;
+}
+
+.connection-status[data-mode="disconnected"] .connection-status__dot {
+  background: #a94e49;
+}
+
+.connection-status[data-mode="disconnected"]:hover {
+  border-color: rgb(169 78 73 / 62%);
+  background: #fff7f5;
+}
+
+.connection-status__label--mobile {
+  display: none;
+}
+
+.connection-status__retry-icon {
+  margin-left: 1px;
 }
 
 .connection-status__dot {
@@ -1009,6 +1040,64 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
+.workflow-elapsed-status {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 7px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--office-line);
+  color: var(--office-navy-faint);
+}
+
+.workflow-elapsed-status > svg {
+  color: var(--office-teal-dark);
+}
+
+.workflow-elapsed-status > span {
+  font-size: 10px;
+  font-weight: 740;
+}
+
+.workflow-elapsed-status > time {
+  justify-self: end;
+  color: var(--office-navy);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 780;
+}
+
+.workflow-elapsed-status > small {
+  grid-column: 2 / -1;
+  color: var(--office-ink-faint);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.handoff-caption__result-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  gap: 6px;
+  padding: 0 12px;
+  margin-top: 9px;
+  border-radius: 8px;
+  background: var(--office-navy);
+  color: white;
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.handoff-caption__result-button:hover {
+  background: var(--office-teal-dark);
+  transform: translateY(-1px);
+}
+
 .handoff-caption__mobile-details {
   display: none;
 }
@@ -1253,6 +1342,25 @@ textarea:focus-visible {
   font-size: 8px;
 }
 
+.poc-truth-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  margin: 0 0 8px;
+  border: 1px solid rgb(19 141 129 / 19%);
+  border-radius: 8px;
+  background: var(--office-teal-pale);
+  color: var(--office-teal-dark);
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.4;
+}
+
+.poc-truth-note svg {
+  flex: 0 0 auto;
+}
+
 .task-composer__field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1462,13 +1570,22 @@ textarea:focus-visible {
   font-weight: 740;
 }
 
-.result-engine-card p {
+.result-engine-card__route {
   display: flex;
   align-items: center;
   gap: 5px;
   margin: 4px 0 0;
   color: var(--office-ink-soft);
   font-size: 9px;
+}
+
+.result-engine-card__metrics {
+  margin: 5px 0 0;
+  color: var(--office-navy);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 720;
+  line-height: 1.45;
 }
 
 .result-engine-card > code {
@@ -1917,9 +2034,16 @@ textarea:focus-visible {
     height: 58px;
   }
 
-  .office-brand small,
-  .connection-status svg {
+  .office-brand small {
     display: none;
+  }
+
+  .connection-status__label--desktop {
+    display: none;
+  }
+
+  .connection-status__label--mobile {
+    display: inline;
   }
 
   .connection-status,
@@ -1927,6 +2051,11 @@ textarea:focus-visible {
     min-height: 30px;
     padding: 0 9px;
     font-size: 9px;
+  }
+
+  .connection-status {
+    min-height: 34px;
+    font-size: 10px;
   }
 
   .office-room {
@@ -2113,6 +2242,28 @@ textarea:focus-visible {
     line-height: 1.5;
   }
 
+  .workflow-elapsed-status {
+    gap: 5px 8px;
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+
+  .workflow-elapsed-status > span,
+  .workflow-elapsed-status > time {
+    font-size: 12px;
+  }
+
+  .workflow-elapsed-status > small {
+    font-size: 10px;
+  }
+
+  .handoff-caption__result-button {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 11px;
+    font-size: 13px;
+  }
+
   .handoff-caption__mobile-details {
     display: block;
     margin-top: 12px;
@@ -2248,6 +2399,14 @@ textarea:focus-visible {
     transform: none;
   }
 
+  .poc-truth-note {
+    font-size: 12px;
+  }
+
+  .task-composer textarea {
+    font-size: 16px;
+  }
+
   .result-drawer > header {
     padding: 22px 19px 17px;
   }
@@ -2259,10 +2418,11 @@ textarea:focus-visible {
 
 @media (max-width: 520px) {
   .connection-status {
-    width: 28px;
-    padding: 0;
+    width: auto;
+    min-width: 0;
+    padding: 0 8px;
     justify-content: center;
-    font-size: 0;
+    font-size: 10px;
   }
 
   .office-clock {

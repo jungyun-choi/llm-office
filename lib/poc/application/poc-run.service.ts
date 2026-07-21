@@ -1,7 +1,7 @@
 import type { AgentRuntimeResult } from "./ports/agent-runtime";
 import type { CreatePocRunInput } from "../domain/poc-schema";
 import { PocError, PocRunnerError } from "../domain/poc-errors";
-import type { PocFallbackReason, PocRunResult } from "../domain/poc-types";
+import type { PocRunResult } from "../domain/poc-types";
 import { runDemoPoc } from "../infrastructure/demo-poc-runner";
 import {
   getConfiguredAgentRuntime,
@@ -39,44 +39,43 @@ export class PocRunService {
     signal?: AbortSignal,
   ): Promise<AgentRuntimeResult> {
     if (input.executionMode === "demo") return runDemoPoc(input.prompt);
-    if (!isLocalRunnerEnabled()) return runDemoPoc(input.prompt, "disabled");
+    if (!isLocalRunnerEnabled()) throw localRuntimeError("disabled");
 
     const runtime = getConfiguredAgentRuntime();
-    if (!(await runtime.isAvailable())) return runDemoPoc(input.prompt, "unavailable");
+    if (!(await runtime.isAvailable())) throw localRuntimeError("unavailable");
     const source = await new SyntheticSimulatorSource().resolve();
-    const startedAt = Date.now();
     try {
       return await runtime.execute({ featureRequest: input.prompt, source, signal });
     } catch (error) {
-      return fallbackAfterRuntimeError(error, input.prompt, Date.now() - startedAt);
+      throw mapRuntimeError(error);
     }
   }
 }
 
-function fallbackAfterRuntimeError(
-  error: unknown,
-  prompt: string,
-  durationMs: number,
-): AgentRuntimeResult {
-  if (error instanceof PocRunnerError && error.reason === "aborted") {
-    throw new PocError("REQUEST_ABORTED", "요청 연결이 종료되었습니다.", 408, true);
-  }
-  const reason: PocFallbackReason = mapFallbackReason(error);
-  const fallback = runDemoPoc(prompt, reason);
-  fallback.metrics = { cliProcesses: 1, modelTurns: 1, durationMs };
-  if (process.env.AI_OFFICE_AGENT_RUNTIME === "codex") {
-    fallback.dataRoute = "external-openai";
-    fallback.runtimeLabel = "안전한 데모 엔진 (Codex 실패 후)";
-  } else if (process.env.AI_OFFICE_AGENT_RUNTIME === "opencode") {
-    fallback.dataRoute = "internal-opencode";
-  }
-  return fallback;
+function mapRuntimeError(error: unknown): PocError {
+  if (!(error instanceof PocRunnerError)) return localRuntimeError("model_error");
+  return localRuntimeError(error.reason);
 }
 
-function mapFallbackReason(error: unknown): PocFallbackReason {
-  if (!(error instanceof PocRunnerError)) return "model_error";
-  if (error.reason === "aborted") return "model_error";
-  return error.reason;
+function localRuntimeError(
+  reason: "disabled" | PocRunnerError["reason"],
+): PocError {
+  if (reason === "aborted") {
+    return new PocError("REQUEST_ABORTED", "요청 연결이 종료되었습니다.", 408, true);
+  }
+  if (reason === "timeout") {
+    return new PocError("LOCAL_RUNTIME_TIMEOUT", "로컬 모델 응답 시간이 초과되었습니다.", 504, true);
+  }
+  if (reason === "disabled") {
+    return new PocError("LOCAL_RUNTIME_DISABLED", "로컬 모델 런타임이 꺼져 있습니다.", 503, false);
+  }
+  if (reason === "unavailable") {
+    return new PocError("LOCAL_RUNTIME_UNAVAILABLE", "로컬 모델 런타임을 사용할 수 없습니다.", 503, true);
+  }
+  if (reason === "invalid_output") {
+    return new PocError("LOCAL_RUNTIME_INVALID_OUTPUT", "모델 결과 형식이 올바르지 않습니다.", 502, true);
+  }
+  return new PocError("LOCAL_RUNTIME_FAILED", "로컬 모델 실행에 실패했습니다.", 502, true);
 }
 
 async function requestFingerprint(input: CreatePocRunInput): Promise<string> {

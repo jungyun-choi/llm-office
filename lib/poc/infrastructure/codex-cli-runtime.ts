@@ -8,6 +8,8 @@ import type {
 import { PocRunnerError } from "../domain/poc-errors";
 import { parseCodexOutput } from "./codex-output-parser";
 import { executeSecureCli } from "./secure-cli-process";
+import { toSyntheticFeatureRequest } from "./synthetic-feature-request";
+import { assertSyntheticSourceBoundary } from "./synthetic-source-boundary";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const REQUIRED_CODEX_VERSION = "codex-cli 0.144.6";
@@ -138,7 +140,7 @@ function codexArguments(request: AgentRuntimeRequest): string[] {
 
 function buildPrompt(request: AgentRuntimeRequest): string {
   const payload = JSON.stringify({
-    featureRequest: request.featureRequest,
+    featureRequest: toSyntheticFeatureRequest(request.featureRequest),
     sourceId: request.source.sourceId,
     sourceDigest: request.source.snapshotDigest,
     repositorySnapshot: request.source.snapshot,
@@ -161,10 +163,7 @@ export class CodexCliRuntime implements AgentRuntime {
   }
 
   async execute(request: AgentRuntimeRequest): Promise<AgentRuntimeResult> {
-    if (request.source.sourceId !== "synthetic-flashsim") {
-      throw new PocRunnerError("unavailable");
-    }
-    await assertSyntheticBoundary(request);
+    await assertSyntheticSourceBoundary(request.source);
     const executable = await findExecutable();
     if (!executable) throw new PocRunnerError("unavailable");
     const result = await executeSecureCli({
@@ -197,18 +196,5 @@ export class CodexCliRuntime implements AgentRuntime {
         durationMs: result.durationMs,
       },
     };
-  }
-}
-
-async function assertSyntheticBoundary(request: AgentRuntimeRequest): Promise<void> {
-  const { realpath } = await import("node:fs/promises");
-  const expectedRoot = await realpath(path.resolve(process.cwd(), "poc", "simulator"));
-  const expectedSchema = await realpath(
-    path.join(expectedRoot, "contracts", "poc-output.schema.json"),
-  );
-  const actualRoot = await realpath(request.source.workingDirectory);
-  const actualSchema = await realpath(request.source.outputSchemaPath);
-  if (actualRoot !== expectedRoot || actualSchema !== expectedSchema) {
-    throw new PocRunnerError("unavailable");
   }
 }

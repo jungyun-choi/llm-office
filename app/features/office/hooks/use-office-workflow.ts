@@ -14,6 +14,7 @@ import { mapPocRunResult } from "../api/map-poc-result";
 import { OFFICE_COPY } from "../copy";
 import { DEMO_WORKFLOW, REDUCED_MOTION_STAGE_DURATION_MS } from "../office-data";
 import type { OfficeRequestInput, OfficeResult, WorkflowStage, WorkflowStatus } from "../types";
+import { calculateWorkflowElapsedSeconds } from "../workflow-elapsed-time";
 import { useReducedMotion } from "./use-reduced-motion";
 
 const MAX_RESULTS = 3;
@@ -21,7 +22,6 @@ const RESULT_ARRIVAL_DURATION_MS = 1_400;
 
 interface OfficeWorkflowOptions {
   resolveEndpoint: () => Promise<PocEndpoint>;
-  markHostedFallback: () => void;
 }
 
 interface OfficeWorkflowState {
@@ -33,13 +33,14 @@ interface OfficeWorkflowState {
   selectedResult: OfficeResult | null;
   errorMessage: string | null;
   isResultArriving: boolean;
+  elapsedSeconds: number;
   startWorkflow: (input: OfficeRequestInput) => boolean;
   openResult: (result: OfficeResult) => void;
   closeResult: () => void;
 }
 
 export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflowState {
-  const { markHostedFallback, resolveEndpoint } = options;
+  const { resolveEndpoint } = options;
   const [status, setStatus] = useState<WorkflowStatus>("idle");
   const [stageIndex, setStageIndex] = useState<number | null>(null);
   const [currentRequest, setCurrentRequest] = useState<string | null>(null);
@@ -47,10 +48,12 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
   const [selectedResult, setSelectedResult] = useState<OfficeResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isResultArriving, setIsResultArriving] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const submissionLockRef = useRef(false);
   const requestControllerRef = useRef<AbortController | null>(null);
   const pendingResultRef = useRef<OfficeResult | null>(null);
   const finalDelayDoneRef = useRef(false);
+  const elapsedStartedAtRef = useRef<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const closeResult = useCallback(() => setSelectedResult(null), []);
 
@@ -58,6 +61,8 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
     if (isPocAbortError(error) || requestControllerRef.current !== controller) return;
     requestControllerRef.current = null;
     submissionLockRef.current = false;
+    elapsedStartedAtRef.current = null;
+    setElapsedSeconds(0);
     setStageIndex(null);
     setErrorMessage(getErrorMessage(error));
     setStatus("error");
@@ -67,6 +72,8 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
     if (!submissionLockRef.current) return;
     submissionLockRef.current = false;
     requestControllerRef.current = null;
+    elapsedStartedAtRef.current = null;
+    setElapsedSeconds(0);
     setResults((current) => [result, ...current].slice(0, MAX_RESULTS));
     setIsResultArriving(true);
     setStatus("complete");
@@ -76,16 +83,15 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
     try {
       const endpoint = await resolveEndpoint();
       if (controller.signal.aborted) return;
-      const outcome = await runPocRequest(endpoint, request, controller.signal);
+      const response = await runPocRequest(endpoint, request, controller.signal);
       if (requestControllerRef.current !== controller) return;
-      if (outcome.usedHostedFallback) markHostedFallback();
-      const result = mapPocRunResult(outcome.result, request);
+      const result = mapPocRunResult(response, request);
       pendingResultRef.current = result;
       if (finalDelayDoneRef.current) completeWorkflow(result);
     } catch (error) {
       failRequest(error, controller);
     }
-  }, [completeWorkflow, failRequest, markHostedFallback, resolveEndpoint]);
+  }, [completeWorkflow, failRequest, resolveEndpoint]);
 
   const startWorkflow = useCallback((input: OfficeRequestInput): boolean => {
     if (submissionLockRef.current) return false;
@@ -97,6 +103,8 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
     setIsResultArriving(false);
     pendingResultRef.current = null;
     finalDelayDoneRef.current = false;
+    elapsedStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
     setErrorMessage(null);
     setStageIndex(0);
     setStatus("running");
@@ -111,6 +119,18 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
   }, [completeWorkflow]);
 
   useStageTimer(status, stageIndex, prefersReducedMotion, setStageIndex, finishFinalDelay);
+
+  useEffect(() => {
+    if (status !== "running") return;
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(calculateWorkflowElapsedSeconds(
+        status,
+        elapsedStartedAtRef.current,
+        Date.now(),
+      ));
+    }, 1_000);
+    return () => window.clearInterval(intervalId);
+  }, [status]);
 
   useEffect(() => {
     if (!isResultArriving) return;
@@ -132,6 +152,7 @@ export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflo
     selectedResult,
     errorMessage,
     isResultArriving,
+    elapsedSeconds,
     startWorkflow,
     openResult: setSelectedResult,
     closeResult,

@@ -12,7 +12,11 @@ export interface AgentRuntimeResult {
   runtimeId: string;
   runtimeLabel: string;
   kind: "agent" | "deterministic";
-  dataRoute: "external-openai" | "internal-opencode" | "deterministic";
+  dataRoute:
+    | "external-openai"
+    | "external-opencode-zen"
+    | "internal-opencode"
+    | "deterministic";
   model?: string;
   output: PocModelOutput;
   fallbackReason?: PocFallbackReason;
