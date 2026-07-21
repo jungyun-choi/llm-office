@@ -3,10 +3,13 @@ import test from "node:test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { OfficeEngineInfo } from "../types";
+import type { OfficeEngineInfo, OfficeTask } from "../types";
+import { pruneOfficeTasks, restoreOfficeTasks } from "../workflow-task-history";
+import { getAgentStateLabel } from "./agent-desk";
 import { OfficeHeader } from "./office-header";
 import { formatExecutionSummary, ResultEngineCard } from "./result-engine-card";
 import { getPocTruthLabel } from "./task-composer";
+import { TaskQueueHistory } from "./task-queue-history";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import {
   calculateWorkflowElapsedSeconds,
@@ -66,4 +69,85 @@ test("elapsed time is formatted and reset outside a running workflow", () => {
   assert.equal(calculateWorkflowElapsedSeconds("complete", 1_000, 71_999), 0);
   assert.equal(calculateWorkflowElapsedSeconds("error", 1_000, 71_999), 0);
   assert.equal(calculateWorkflowElapsedSeconds("running", null, 71_999), 0);
+});
+
+test("queue history exposes queued work and safe failure details", () => {
+  const tasks: readonly OfficeTask[] = [
+    {
+      id: "task-running",
+      request: "첫 번째 작업을 분석해줘",
+      status: "running",
+      submittedAt: "2026-07-22T00:00:00.000Z",
+    },
+    {
+      id: "task-pending",
+      request: "두 번째 작업을 분석해줘",
+      status: "pending",
+      submittedAt: "2026-07-22T00:01:00.000Z",
+    },
+    {
+      id: "task-failed",
+      request: "실패한 작업",
+      status: "failed",
+      submittedAt: "2026-07-22T00:02:00.000Z",
+      errorMessage: "모델 응답 형식을 확인하지 못했습니다.",
+    },
+  ];
+
+  const markup = renderToStaticMarkup(
+    <TaskQueueHistory
+      tasks={tasks}
+      onResultOpen={() => undefined}
+      onTaskCancel={() => undefined}
+      onHistoryClear={() => undefined}
+    />,
+  );
+
+  assert.match(markup, /1건 대기/u);
+  assert.match(markup, /첫 번째 작업을 분석해줘/u);
+  assert.match(markup, /모델 응답 형식을 확인하지 못했습니다/u);
+  assert.equal(getAgentStateLabel("error"), "문제 발생");
+});
+
+test("stored running work returns to the FIFO and terminal history is bounded", () => {
+  const restored = restoreOfficeTasks(JSON.stringify([
+    {
+      id: "task-running",
+      request: "새로고침 전에 실행 중이던 작업",
+      status: "running",
+      submittedAt: "2026-07-22T00:00:00.000Z",
+    },
+    { bad: "record" },
+  ]));
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0]?.status, "pending");
+
+  const terminalTasks: OfficeTask[] = Array.from({ length: 24 }, (_, index) => ({
+    id: `done-${index}`,
+    request: `완료 ${index}`,
+    status: "completed",
+    submittedAt: new Date(index).toISOString(),
+  }));
+  const pendingTask: OfficeTask = {
+    id: "still-pending",
+    request: "아직 대기 중",
+    status: "pending",
+    submittedAt: "2026-07-22T00:00:00.000Z",
+  };
+  const pruned = pruneOfficeTasks([...terminalTasks, pendingTask]);
+
+  assert.equal(pruned.length, 21);
+  assert.equal(pruned[0]?.id, "done-4");
+  assert.equal(pruned.at(-1)?.id, "still-pending");
+
+  const tooManyPending: OfficeTask[] = Array.from({ length: 12 }, (_, index) => ({
+    id: `pending-${index}`,
+    request: `대기 ${index}`,
+    status: "pending",
+    submittedAt: new Date(index).toISOString(),
+  }));
+  assert.deepEqual(
+    pruneOfficeTasks(tooManyPending).map((task) => task.id),
+    tooManyPending.slice(0, 10).map((task) => task.id),
+  );
 });

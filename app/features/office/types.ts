@@ -14,8 +14,9 @@ export type AgentSeat =
   | "south-east"
   | "south";
 
-export type AgentFlowState = "idle" | "sending" | "receiving" | "complete";
+export type AgentFlowState = "idle" | "sending" | "receiving" | "complete" | "error";
 export type WorkflowStatus = "idle" | "running" | "complete" | "error";
+export type OfficeTaskStatus = "pending" | "running" | "completed" | "failed";
 
 export interface OfficeAgent {
   id: AgentId;
@@ -99,4 +100,14 @@ export interface OfficeResult {
 
 export interface OfficeRequestInput {
   request: string;
+}
+
+export interface OfficeTask {
+  id: string;
+  request: string;
+  status: OfficeTaskStatus;
+  submittedAt: string;
+  result?: OfficeResult;
+  errorMessage?: string;
+  errorAgentIds?: readonly AgentId[];
 }

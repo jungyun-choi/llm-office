@@ -35,6 +35,11 @@ export function OfficeClient() {
           isResultArriving={workflow.isResultArriving}
           connectionMode={transport.connectionMode}
           elapsedSeconds={workflow.elapsedSeconds}
+          tasks={workflow.tasks}
+          errorAgentIds={workflow.errorAgentIds}
+          queueErrorMessage={workflow.queueErrorMessage}
+          onTaskCancel={workflow.cancelTask}
+          onTaskHistoryClear={workflow.clearTaskHistory}
         />
       </main>
       <ResultDrawer result={workflow.selectedResult} onClose={workflow.closeResult} />

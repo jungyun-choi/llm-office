@@ -154,7 +154,7 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 - token discovery는 동일 OS 계정의 로컬 프로세스를 신뢰하며 Unix socket 또는 상호 인증을 사용하지 않는다. 따라서 악성 로컬 프로세스나 port 선점 공격은 이 POC의 수용된 잔여 위험이다.
 - 모바일용 웹서버에는 별도 사용자 인증이 없다. `0.0.0.0`이 아니라 정확한 Tailscale IP에 bind하고 tailnet ACL로 허용 모바일을 제한한다. 인터넷, 공용 Wi-Fi 또는 회사 네트워크에 직접 공개하지 않는다.
 - OpenCode 1.4.3의 무인증 무료 Zen 모델 검색 제약 때문에 실제 사용자 XDG config/data/cache를 읽는다. `HOME`, state, temp와 작업 디렉터리는 격리하지만 글로벌 인증·cache·session 상태는 완전히 격리되지 않으며, bridge를 같은 OS 계정으로 실행하는 모든 로컬 프로세스를 신뢰한다.
-- 요청은 전송 전 시간당 10건, 동시 실행 1건, 대기열 0건, 단일 모델 시도와 timeout으로 제한한다. 실패한 요청을 다른 provider 또는 합성 데모로 자동 재전송하지 않는다.
+- bridge 자체는 시간당 10건, 동시 실행 1건, 서버 대기열 0건, 단일 모델 시도와 timeout으로 제한한다. 합성 POC UI는 브라우저에 최대 10건만 임시 보관해 한 건씩 bridge로 전달하며 대기 취소와 히스토리 삭제를 제공한다. 저장된 작업도 복원 시 같은 상한을 적용한다. 실패한 요청을 다른 provider 또는 합성 데모로 자동 재전송하지 않는다.
 - Zen 무료 모델은 외부·미국 처리 경로이며 데이터 보존·모델 개선 조건이 적용될 수 있다. 회사 요청, 코드, Wiki, 경로, 실제 성능 수치, 식별자와 secret은 UI에도 입력하지 않는다.
 - 실제 사내 source를 연결하기 전 전용 OS identity 또는 container, 사내 OpenCode/LLM endpoint, SSO, service credential, Unix socket/mTLS와 egress deny 정책으로 교체해야 한다. 이 예외는 회사 데이터나 production 승인으로 간주하지 않는다.
 

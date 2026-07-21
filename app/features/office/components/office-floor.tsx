@@ -3,11 +3,12 @@ import { BriefcaseBusiness, FileText } from "lucide-react";
 import type { PocConnectionMode } from "../api/poc-client";
 import { OFFICE_COPY } from "../copy";
 import { DEMO_WORKFLOW, OFFICE_AGENTS } from "../office-data";
-import type { AgentFlowState, AgentId, OfficeAgent, OfficeRequestInput, OfficeResult, WorkflowStage, WorkflowStatus } from "../types";
+import type { AgentFlowState, AgentId, OfficeAgent, OfficeRequestInput, OfficeResult, OfficeTask, WorkflowStage, WorkflowStatus } from "../types";
 import { AgentDesk } from "./agent-desk";
 import { CollaborationTable } from "./collaboration-table";
 import { ResultVault } from "./result-vault";
 import { TaskComposer } from "./task-composer";
+import { TaskQueueHistory } from "./task-queue-history";
 import { TransferPacket } from "./transfer-packet";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 
@@ -22,6 +23,11 @@ interface OfficeFloorProps {
   isResultArriving: boolean;
   connectionMode: PocConnectionMode;
   elapsedSeconds: number;
+  tasks: readonly OfficeTask[];
+  errorAgentIds: readonly AgentId[];
+  queueErrorMessage: string | null;
+  onTaskCancel: (taskId: string) => void;
+  onTaskHistoryClear: () => void;
 }
 
 export function OfficeFloor(props: OfficeFloorProps) {
@@ -59,7 +65,7 @@ export function OfficeFloor(props: OfficeFloorProps) {
       <OfficeDecor />
       <ul className="agent-stations" aria-label={OFFICE_COPY.accessibility.officeAgents}>
         {OFFICE_AGENTS.map((agent) => {
-          const state = getAgentFlowState(agent.id, props.status, props.currentStage);
+          const state = getAgentFlowState(agent.id, props.status, props.currentStage, props.errorAgentIds);
           return (
             <AgentDesk
               key={agent.id}
@@ -140,6 +146,12 @@ export function OfficeFloor(props: OfficeFloorProps) {
           )}
         </div>
       </div>
+      <TaskQueueHistory
+        tasks={props.tasks}
+        onResultOpen={props.onResultOpen}
+        onTaskCancel={props.onTaskCancel}
+        onHistoryClear={props.onTaskHistoryClear}
+      />
       <ResultVault
         results={props.results}
         isReceiving={props.isResultArriving}
@@ -148,6 +160,7 @@ export function OfficeFloor(props: OfficeFloorProps) {
       <TaskComposer
         isRunning={props.status === "running"}
         connectionMode={props.connectionMode}
+        queueErrorMessage={props.queueErrorMessage}
         onRequest={props.onRequest}
       />
     </section>
@@ -210,7 +223,9 @@ function getAgentFlowState(
   agentId: AgentId,
   status: WorkflowStatus,
   stage: WorkflowStage | null,
+  errorAgentIds: readonly AgentId[],
 ): AgentFlowState {
+  if (status === "error" && errorAgentIds.includes(agentId)) return "error";
   if (status === "complete") return agentId === "orchestrator" ? "complete" : "idle";
   if (status !== "running" || !stage) return "idle";
   if (stage.receiverIds.includes(agentId)) return "receiving";
@@ -224,6 +239,7 @@ function getAgentActivity(
   state: AgentFlowState,
   stage: WorkflowStage | null,
 ): string {
+  if (state === "error") return OFFICE_COPY.floor.errorActivity;
   if (state === "complete") return OFFICE_COPY.floor.completeActivity;
   if (state === "idle" || !stage) return specialty;
   return stage.agentActions[agentId] ?? specialty;

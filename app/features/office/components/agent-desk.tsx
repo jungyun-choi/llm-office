@@ -58,6 +58,7 @@ export function AgentDesk({ agent, state, activity }: AgentDeskProps) {
 }
 
 export function getAgentStateLabel(state: AgentFlowState): string {
+  if (state === "error") return OFFICE_COPY.floor.error;
   if (state === "sending") return OFFICE_COPY.floor.activeSender;
   if (state === "receiving") return OFFICE_COPY.floor.activeReceiver;
   if (state === "complete") return OFFICE_COPY.floor.complete;

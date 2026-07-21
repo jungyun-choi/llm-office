@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, Info, LoaderCircle } from "lucide-react";
+import { ArrowUp, Info, ListPlus } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useForm } from "react-hook-form";
 
@@ -13,10 +13,11 @@ import type { OfficeRequestInput } from "../types";
 interface TaskComposerProps {
   isRunning: boolean;
   connectionMode: PocConnectionMode;
+  queueErrorMessage: string | null;
   onRequest: (input: OfficeRequestInput) => boolean;
 }
 
-export function TaskComposer({ isRunning, connectionMode, onRequest }: TaskComposerProps) {
+export function TaskComposer({ isRunning, connectionMode, queueErrorMessage, onRequest }: TaskComposerProps) {
   const form = useForm<OfficeRequestInput>({
     resolver: zodResolver(officeRequestSchema),
     defaultValues: { request: "" },
@@ -33,6 +34,7 @@ export function TaskComposer({ isRunning, connectionMode, onRequest }: TaskCompo
   }
 
   const error = form.formState.errors.request;
+  const errorMessage = error?.message ?? queueErrorMessage;
 
   return (
     <form className="task-composer" onSubmit={submitRequest} noValidate>
@@ -47,30 +49,29 @@ export function TaskComposer({ isRunning, connectionMode, onRequest }: TaskCompo
         <Info size={14} aria-hidden="true" />
         <span>{getPocTruthLabel(connectionMode)}</span>
       </p>
-      <div className={`task-composer__field ${error ? "has-error" : ""}`}>
+      <div className={`task-composer__field ${errorMessage ? "has-error" : ""}`}>
         <textarea
           id="office-request"
           maxLength={2_000}
           rows={2}
           placeholder={OFFICE_COPY.composer.placeholder}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "office-request-error" : "office-request-hint"}
-          disabled={isRunning}
+          aria-invalid={Boolean(errorMessage)}
+          aria-describedby={errorMessage ? "office-request-error" : "office-request-hint"}
           onKeyDown={handleComposerKeyDown}
           {...form.register("request")}
         />
-        <button type="submit" disabled={isRunning}>
+        <button type="submit">
           {isRunning ? (
-            <LoaderCircle className="is-spinning" size={18} aria-hidden="true" />
+            <ListPlus size={18} aria-hidden="true" />
           ) : (
             <ArrowUp size={19} strokeWidth={2.4} aria-hidden="true" />
           )}
-          <span>{isRunning ? OFFICE_COPY.composer.running : OFFICE_COPY.composer.submit}</span>
+          <span>{isRunning ? OFFICE_COPY.composer.enqueue : OFFICE_COPY.composer.submit}</span>
         </button>
       </div>
-      {error ? (
+      {errorMessage ? (
         <p className="task-composer__error" id="office-request-error" role="alert">
-          {error.message}
+          {errorMessage}
         </p>
       ) : (
         <p className="task-composer__hint" id="office-request-hint">
