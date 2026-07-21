@@ -44,4 +44,6 @@ next-env.d.ts
 /outputs/
 /work/
 /poc/simulator/.runtime/
+/config/agents.company.yaml
+/config/opencode.company.json
 .gstack/

@@ -19,6 +19,7 @@ import { runHostedPoc } from "../lib/poc/application/hosted-poc-run.service";
 import { PocRunService } from "../lib/poc/application/poc-run.service";
 import type { OpenCodeRuntimeConfig } from "../lib/poc/infrastructure/opencode-runtime-config";
 import { PocError, PocRunnerError } from "../lib/poc/domain/poc-errors";
+import { pocModelOutputSchema } from "../lib/poc/domain/poc-schema";
 import { runDemoPoc } from "../lib/poc/infrastructure/demo-poc-runner";
 import { OpenCodeCliRuntime } from "../lib/poc/infrastructure/opencode-poc-runner";
 import {
@@ -58,6 +59,73 @@ test("OpenCode parser accepts braces in JSON strings and rejects error events", 
     () => parseOpenCodeOutput(JSON.stringify({ type: "error", error: "hidden" })),
     (error) => error instanceof PocRunnerError && error.reason === "model_error",
   );
+});
+
+test("OpenCode parser normalizes Zen structured risks into canonical text", () => {
+  const output = structuredClone(runDemoPoc("read buffer 크기를 2mb로 증가시켜줘").output);
+  const observedRisks = [
+    {
+      risk: "Existing tests may rely on exact result structure (e.g., field count); mitigation: add new fields as optional or append them at the end.",
+      mitigation: "Add new fields as optional with defaults or extend dataclass with ordered fields.",
+    },
+    {
+      risk: "Determinism may be compromised if buffer state depends on unidentified external factors; mitigation: keep sequential processing, no random eviction policy.",
+      mitigation: "Use fixed eviction policy (e.g., FIFO) and deterministic buffer size.",
+    },
+    {
+      risk: "CLI output format change may break scripts; mitigation: maintain backward-compatible output or add flag to enable new fields.",
+      mitigation: "Always include new fields with sensible defaults (0 for flush count, 1.0 for hit ratio when no writes).",
+    },
+  ];
+  (output.brief as { risks: unknown[] }).risks = observedRisks;
+  const event = JSON.stringify({
+    type: "text",
+    part: { text: JSON.stringify(output) },
+  });
+
+  assert.deepEqual(parseOpenCodeOutput(event).brief.risks, [
+    "Existing tests may rely on exact result structure (e.g., field count). Mitigation: Add new fields as optional with defaults or extend dataclass with ordered fields.",
+    "Determinism may be compromised if buffer state depends on unidentified external factors. Mitigation: Use fixed eviction policy (e.g., FIFO) and deterministic buffer size.",
+    "CLI output format change may break scripts. Mitigation: Always include new fields with sensible defaults (0 for flush count, 1.0 for hit ratio when no writes).",
+  ]);
+});
+
+test("OpenCode parser rejects malformed structured risks", () => {
+  const invalidRisks = [
+    { risk: "data loss", mitigation: "add a guard", extra: "unexpected" },
+    { risk: "data loss", mitigation: "" },
+    { risk: "r".repeat(550), mitigation: "m".repeat(100) },
+  ];
+
+  for (const invalidRisk of invalidRisks) {
+    const output = structuredClone(runDemoPoc("read buffer 크기를 2mb로 증가시켜줘").output);
+    (output.brief as { risks: unknown[] }).risks = [invalidRisk];
+    const event = JSON.stringify({
+      type: "text",
+      part: { text: JSON.stringify(output) },
+    });
+    assert.throws(
+      () => parseOpenCodeOutput(event),
+      (error) => error instanceof PocRunnerError && error.reason === "invalid_output",
+    );
+  }
+});
+
+test("model evidence accepts configurable project roots and rejects parent traversal", () => {
+  const output = structuredClone(runDemoPoc("write buffer 기능을 추가해 주세요").output);
+  output.roleOutputs[0].evidence = [
+    ".LLM/DLD/read-buffer.md: 상세 스펙",
+  ];
+  output.roleOutputs[1].evidence = [
+    "common/framework/buffer.hpp: 공통 인터페이스",
+  ];
+  output.roleOutputs[2].evidence = [
+    "FTL/topview/write-flow.svg: 커맨드별 패킷 흐름",
+  ];
+  assert.doesNotThrow(() => pocModelOutputSchema.parse(output));
+
+  output.roleOutputs[0].evidence = ["FTL/../private.md: parent traversal"];
+  assert.equal(pocModelOutputSchema.safeParse(output).success, false);
 });
 
 test("request parser streams UTF-8 JSON and rejects bodies above 8 KiB", async () => {
@@ -170,6 +238,7 @@ test("same-origin proxy keeps the bridge token server-side", async () => {
   const originalFetch = globalThis.fetch;
   const bridgeToken = "a".repeat(43);
   let forwardedToken: string | null = null;
+  let capabilityCalls = 0;
   const capabilities = {
     apiVersion: "v1",
     environment: "local",
@@ -195,12 +264,23 @@ test("same-origin proxy keeps the bridge token server-side", async () => {
     assert.equal(isLocalPocProxyEnabled(), true);
     globalThis.fetch = async (input, init) => {
       const url = String(input);
-      if (url.endsWith("/capabilities")) return Response.json(capabilities);
+      if (url.endsWith("/capabilities")) {
+        capabilityCalls += 1;
+        if (capabilityCalls === 1) {
+          throw new TypeError("bridge is still starting");
+        }
+        if (capabilityCalls === 2) {
+          return delayedAbortableResponse(capabilities, init?.signal, 1_750);
+        }
+        return Response.json(capabilities);
+      }
       forwardedToken = new Headers(init?.headers).get("x-ai-office-bridge-token");
       return Response.json({ accepted: true });
     };
 
     const capabilityResponse = await proxyLocalPocCapabilities();
+    assert.equal(capabilityResponse.status, 200);
+    assert.equal(capabilityCalls, 2);
     const browserPayload = await capabilityResponse.json() as Record<string, unknown>;
     assert.equal("bridgeToken" in browserPayload, false);
 
@@ -679,6 +759,24 @@ function jsonRequest(body: string): Request {
     body: stream,
     duplex: "half",
   } as RequestInit & { duplex: "half" });
+}
+
+function delayedAbortableResponse(
+  value: unknown,
+  signal: AbortSignal | null | undefined,
+  delayMs: number,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      reject(new DOMException("Request aborted", "AbortError"));
+    };
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(Response.json(value));
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function restoreEnvironment(name: string, value: string | undefined): void {

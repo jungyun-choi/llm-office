@@ -14,6 +14,7 @@ const prohibitedControlCharacters =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/u;
 const probableSecret =
   /(?:-----BEGIN [A-Z ]*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|authorization\s*:\s*bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[=:]\s*\S{8,})/iu;
+const parentPathSegment = /(?:^|[^.])\.\.(?=[/\\]|$)/u;
 
 export const createPocRunSchema = z
   .object({
@@ -37,12 +38,9 @@ const evidenceSchema = z
   .trim()
   .min(1)
   .max(240)
-  .refine((value) => !value.includes(".."), "Evidence path cannot traverse directories")
-  .refine((value) => !/(?:[a-z]+:\/\/|^\/|^~)/iu.test(value), "Evidence must be relative")
   .refine(
-    (value) =>
-      /(?:README\.md|(?:wiki|src|tests|config)\/[-a-zA-Z0-9_./]+)/u.test(value),
-    "Evidence must point to the synthetic repository",
+    (value) => !parentPathSegment.test(value),
+    "Evidence path cannot traverse directories",
   );
 
 export const roleOutputSchema = z

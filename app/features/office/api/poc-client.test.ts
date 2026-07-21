@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PocCapabilitiesDto } from "./poc-contract";
-import { PocClientError, resolvePocEndpoint } from "./poc-client";
+import { createRequestId, PocClientError, resolvePocEndpoint } from "./poc-client";
 
 const HOSTED_CAPABILITIES = {
   apiVersion: "v1",
@@ -49,6 +49,20 @@ test("local capability fails closed when its runtime is unavailable", () => {
   assert.throws(
     () => resolvePocEndpoint(capabilities),
     (error) => error instanceof PocClientError && error.code === "LOCAL_RUNTIME_UNAVAILABLE",
+  );
+});
+
+test("request IDs work on insecure HTTP origins without crypto.randomUUID", () => {
+  const insecureOriginCrypto = {
+    getRandomValues(bytes: Uint8Array): Uint8Array {
+      bytes.set(Array.from({ length: bytes.length }, (_, index) => index));
+      return bytes;
+    },
+  };
+
+  assert.equal(
+    createRequestId(insecureOriginCrypto),
+    "00010203-0405-4607-8809-0a0b0c0d0e0f",
   );
 });
 

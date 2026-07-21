@@ -44,10 +44,52 @@ function collectModelText(stdout: string): string {
   return text;
 }
 
+function normalizeStructuredRisk(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const keys = Object.keys(value);
+  if (
+    keys.length !== 2
+    || !keys.includes("risk")
+    || !keys.includes("mitigation")
+    || typeof value.risk !== "string"
+    || typeof value.mitigation !== "string"
+  ) {
+    return value;
+  }
+
+  const risk = value.risk
+    .replace(/\s*;\s*mitigation\s*:.*$/iu, "")
+    .trim();
+  const mitigation = value.mitigation.trim();
+  if (!risk || !mitigation) {
+    return value;
+  }
+
+  const separator = /[.!?]$/u.test(risk) ? "" : ".";
+  return `${risk}${separator} Mitigation: ${mitigation}`;
+}
+
+function normalizeOpenCodeOutput(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.brief) || !Array.isArray(value.brief.risks)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    brief: {
+      ...value.brief,
+      risks: value.brief.risks.map(normalizeStructuredRisk),
+    },
+  };
+}
+
 export function parseOpenCodeOutput(stdout: string): PocModelOutput {
   const modelText = collectModelText(stdout);
   const output = findLastValidJsonObject(modelText, (value) =>
-    pocModelOutputSchema.parse(value),
+    pocModelOutputSchema.parse(normalizeOpenCodeOutput(value)),
   );
   if (!output) {
     throw new PocRunnerError("invalid_output");

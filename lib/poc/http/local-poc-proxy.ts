@@ -3,7 +3,8 @@ import type { PocCapabilities } from "../domain/poc-types";
 import { errorResponse, jsonResponse, parsePocRequest } from "./poc-http";
 
 const BRIDGE_BASE_URL = "http://127.0.0.1:4317/api/v1/poc";
-const CAPABILITY_TIMEOUT_MS = 1_500;
+const CAPABILITY_TIMEOUT_MS = 8_000;
+const BRIDGE_START_RETRY_DELAYS_MS = [300, 700] as const;
 const BRIDGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
 
 interface BridgeCapabilities extends PocCapabilities {
@@ -58,6 +59,25 @@ export async function proxyLocalPocRun(request: Request): Promise<Response> {
 }
 
 async function readBridgeCapabilities(): Promise<BridgeCapabilities> {
+  for (let attempt = 0; attempt <= BRIDGE_START_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await fetchBridgeCapabilities();
+    } catch (error) {
+      if (
+        error instanceof PocError ||
+        isAbortError(error) ||
+        attempt === BRIDGE_START_RETRY_DELAYS_MS.length
+      ) {
+        if (error instanceof PocError) throw error;
+        throw localRunnerUnavailable();
+      }
+      await delay(BRIDGE_START_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw localRunnerUnavailable();
+}
+
+async function fetchBridgeCapabilities(): Promise<BridgeCapabilities> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CAPABILITY_TIMEOUT_MS);
   try {
@@ -71,12 +91,17 @@ async function readBridgeCapabilities(): Promise<BridgeCapabilities> {
     const payload = await readJson(response);
     if (!isBridgeCapabilities(payload)) throw localRunnerUnavailable();
     return payload;
-  } catch (error) {
-    if (error instanceof PocError) throw error;
-    throw localRunnerUnavailable();
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function isBridgeCapabilities(value: unknown): value is BridgeCapabilities {

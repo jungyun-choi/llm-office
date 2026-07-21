@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  PocClientError,
   probePocEndpoint,
   type PocConnectionMode,
   type PocEndpoint,
@@ -20,14 +19,12 @@ export function usePocTransport(): PocTransportState {
   const endpointRef = useRef<PocEndpoint | undefined>(undefined);
   const probePromiseRef = useRef<Promise<PocEndpoint> | undefined>(undefined);
   const probeControllerRef = useRef<AbortController | undefined>(undefined);
-  const probeErrorRef = useRef<PocClientError | undefined>(undefined);
 
-  const startProbe = useCallback(() => {
+  const startProbe = useCallback((): Promise<PocEndpoint> => {
     probeControllerRef.current?.abort();
     const controller = new AbortController();
     probeControllerRef.current = controller;
     endpointRef.current = undefined;
-    probeErrorRef.current = undefined;
     const probe = probePocEndpoint(controller.signal);
     probePromiseRef.current = probe;
     void probe.then(
@@ -36,14 +33,8 @@ export function usePocTransport(): PocTransportState {
         endpointRef.current = endpoint;
         setConnectionMode(endpoint.connectionMode);
       },
-      (error: unknown) => {
+      () => {
         if (probeControllerRef.current !== controller || controller.signal.aborted) return;
-        probeErrorRef.current = error instanceof PocClientError
-          ? error
-          : new PocClientError(
-            "CAPABILITIES_UNAVAILABLE",
-            "POC 실행 환경을 확인하지 못했습니다. Zen 연결을 다시 확인해 주세요.",
-          );
         setConnectionMode("disconnected");
       },
     ).finally(() => {
@@ -51,15 +42,16 @@ export function usePocTransport(): PocTransportState {
       probeControllerRef.current = undefined;
       if (probePromiseRef.current === probe) probePromiseRef.current = undefined;
     });
+    return probe;
   }, []);
 
   const retryConnection = useCallback(() => {
     setConnectionMode("checking");
-    startProbe();
+    void startProbe();
   }, [startProbe]);
 
   useEffect(() => {
-    startProbe();
+    void startProbe();
     return () => {
       probeControllerRef.current?.abort();
       probeControllerRef.current = undefined;
@@ -72,10 +64,9 @@ export function usePocTransport(): PocTransportState {
     if (probe) return probe;
     const endpoint = endpointRef.current;
     if (endpoint) return endpoint;
-    const probeError = probeErrorRef.current;
-    if (probeError) throw probeError;
-    throw new PocClientError("CAPABILITIES_NOT_READY", "POC 실행 환경을 확인하는 중입니다.");
-  }, []);
+    setConnectionMode("checking");
+    return startProbe();
+  }, [startProbe]);
 
   return { connectionMode, resolveEndpoint, retryConnection };
 }

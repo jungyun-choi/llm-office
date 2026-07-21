@@ -51,9 +51,9 @@ test("server-renders the AI Office floor", async () => {
   assert.match(html, /팀이 움직이는 사무실/);
   assert.match(html, /오비트에게 요청/);
   assert.match(html, /오케스트레이터/);
-  assert.match(html, /자료조사/);
-  assert.match(html, /프레임워크/);
-  assert.match(html, /견적분석/);
+  assert.match(html, /DLD · 위키/);
+  assert.match(html, /코드 · 프레임워크/);
+  assert.match(html, /TopView · 영향\/견적/);
   assert.match(html, /테스트/);
   assert.match(html, /결과 보관함/);
   assert.match(html, /id="main-content"/);

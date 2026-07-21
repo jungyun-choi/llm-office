@@ -16,7 +16,7 @@ export interface PocEndpoint {
 }
 
 const POC_API_BASE = "/api/v1/poc";
-const CAPABILITIES_REQUEST_TIMEOUT_MS = 2_500;
+const CAPABILITIES_REQUEST_TIMEOUT_MS = 10_000;
 const HOSTED_REQUEST_TIMEOUT_MS = 15_000;
 
 export function hostedPocEndpoint(): PocEndpoint {
@@ -80,6 +80,11 @@ export async function runPocRequest(
 interface RequestIds {
   idempotencyKey: string;
   correlationId: string;
+}
+
+interface RequestIdCrypto {
+  randomUUID?: () => string;
+  getRandomValues?: (bytes: Uint8Array) => Uint8Array;
 }
 
 async function postRun(
@@ -163,7 +168,30 @@ function runtimeMode(label: string): PocConnectionMode {
 }
 
 function createRequestIds(): RequestIds {
-  return { idempotencyKey: crypto.randomUUID(), correlationId: crypto.randomUUID() };
+  return { idempotencyKey: createRequestId(), correlationId: createRequestId() };
+}
+
+export function createRequestId(source: RequestIdCrypto | undefined = globalThis.crypto): string {
+  if (typeof source?.randomUUID === "function") return source.randomUUID();
+  if (typeof source?.getRandomValues !== "function") {
+    throw new PocClientError(
+      "REQUEST_ID_UNAVAILABLE",
+      "브라우저가 안전한 요청 식별자를 만들지 못했습니다.",
+    );
+  }
+
+  const bytes = new Uint8Array(16);
+  source.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return [
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10).join(""),
+  ].join("-");
 }
 
 function createAbortError(): DOMException {

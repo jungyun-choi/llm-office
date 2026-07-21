@@ -4,11 +4,11 @@ import type { PocRunResult, PocWorkflowStage } from "../domain/poc-types";
 
 const AGENT_NAMES: Record<"orchestrator" | PocAgentRole, string> = {
   orchestrator: "Orbit",
-  research: "Probe",
-  framework: "Flash-X",
-  estimate: "Calc",
+  research: "DLD",
+  framework: "Code-X",
+  estimate: "TopView",
   test: "Verify",
-  git: "Gitmate",
+  git: "Handoff",
 };
 
 export function buildPocRunResult(
