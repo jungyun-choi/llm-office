@@ -93,20 +93,25 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
                     onSelect={props.onSelect}
                     now={now}
                   />
-                ) : jobs.length > 0 ? (
-                  <ol>
-                    {jobs.slice(0, 3).map((job) => (
-                      <li key={job.id} data-state={job.state} data-selected={job.id === props.selectedJobId ? "true" : "false"}>
-                        <button type="button" onClick={() => props.onSelect(job.id)}>
-                          <span className="company-team-lane__status"><i aria-hidden="true" />{getJobStateLabel(job.state)}</span>
-                          <strong>{job.prompt}</strong>
-                          <small>{getTeamActivity(job)}</small>
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
                 ) : (
-                  <p className="company-team-lane__empty">현재 업무 없음 · 새 인계를 기다리는 중</p>
+                  <>
+                    <TeamRoomScene teamId={team.id} hasWork={jobs.length > 0} />
+                    {jobs.length > 0 ? (
+                      <ol className="company-team-lane__inbox">
+                        {jobs.slice(0, 3).map((job) => (
+                          <li key={job.id} data-state={job.state} data-selected={job.id === props.selectedJobId ? "true" : "false"}>
+                            <button type="button" onClick={() => props.onSelect(job.id)}>
+                              <span className="company-team-lane__status"><i aria-hidden="true" />{getJobStateLabel(job.state)}</span>
+                              <strong>{job.prompt}</strong>
+                              <small>{getTeamActivity(job)}</small>
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="company-team-lane__empty">새 업무를 기다리는 중</p>
+                    )}
+                  </>
                 )}
                 {team.id !== "review" && jobs.length > 3 && <p className="company-team-lane__more">외 {jobs.length - 3}건이 이 팀 대기열에 있습니다.</p>}
               </section>
@@ -139,28 +144,50 @@ function HumanReviewFileStack(props: {
           <p>{props.snapshot.detail}</p>
         </div>
       </div>
-      {visibleJobs.length > 0 ? (
-        <ol className="human-file-stack" aria-label="사람 검토 대기 파일철">
-          {visibleJobs.map((job, index) => (
-            <li
-              key={job.id}
-              data-selected={job.id === props.selectedJobId ? "true" : "false"}
-              style={{ "--file-index": index } as CSSProperties}
-            >
-              <button type="button" onClick={() => props.onSelect(job.id)}>
-                <span className="human-file-stack__tab">{getHumanGateLabel(job.state)}</span>
-                <strong>{job.prompt}</strong>
-                <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
-              </button>
-            </li>
-          ))}
-          {props.jobs.length > visibleJobs.length && (
-            <li className="human-file-stack__overflow">+{props.jobs.length - visibleJobs.length}개 파일철</li>
-          )}
-        </ol>
-      ) : (
-        <p className="company-team-lane__empty">검토 파일철 없음 · 새 검토를 기다리는 중</p>
-      )}
+      <div className="human-review-room">
+        <div className="human-review-room__window" aria-hidden="true"><span /><span /></div>
+        <div className="human-review-room__person" aria-hidden="true"><span /><i /></div>
+        <div className="human-review-room__desk" aria-hidden="true"><span /></div>
+        {visibleJobs.length > 0 ? (
+          <ol className="human-file-stack" aria-label="사람 검토 대기 파일철">
+            {visibleJobs.map((job, index) => (
+              <li
+                key={job.id}
+                data-selected={job.id === props.selectedJobId ? "true" : "false"}
+                style={{ "--file-index": index } as CSSProperties}
+              >
+                <button type="button" onClick={() => props.onSelect(job.id)}>
+                  <span className="human-file-stack__tab">{getHumanGateLabel(job.state)}</span>
+                  <strong>{job.prompt}</strong>
+                  <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
+                </button>
+              </li>
+            ))}
+            {props.jobs.length > visibleJobs.length && (
+              <li className="human-file-stack__overflow">+{props.jobs.length - visibleJobs.length}개</li>
+            )}
+          </ol>
+        ) : (
+          <p className="company-team-lane__empty">책상 위가 비어 있습니다</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TeamRoomScene(props: { teamId: "analysis" | "development"; hasWork: boolean }) {
+  const Icon = props.teamId === "analysis" ? BrainCircuit : Code2;
+  return (
+    <div className="team-room-scene" data-team={props.teamId} data-active={props.hasWork ? "true" : "false"} aria-hidden="true">
+      <div className="team-room-scene__window"><span /><span /></div>
+      <div className="team-room-scene__plant"><span /><i /></div>
+      <div className="team-room-scene__desk">
+        <span className="team-room-scene__monitor"><Icon size={22} /><i /></span>
+        <span className="team-room-scene__keyboard" />
+        <span className="team-room-scene__mug" />
+        <span className="team-room-scene__person"><i /><b /></span>
+      </div>
+      <span className="team-room-scene__caption">{props.hasWork ? "업무 처리 중" : "다음 업무 대기"}</span>
     </div>
   );
 }
