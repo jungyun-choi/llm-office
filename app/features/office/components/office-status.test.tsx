@@ -14,7 +14,11 @@ import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
 import { ClaudeOffice, getDevelopmentStationState } from "./claude-office";
 import { AnalysisOffice, getAnalysisAgentState } from "./analysis-office";
-import { CompanyOperationsBoard, getCompanyTeam } from "./company-operations-board";
+import {
+  CompanyOperationsBoard,
+  getCompanyTeam,
+  getHumanBottleneckSnapshot,
+} from "./company-operations-board";
 import { getAnalysisPhaseLabel } from "./analysis-stage-progress";
 import {
   calculateWorkflowElapsedSeconds,
@@ -210,8 +214,37 @@ test("company board assigns simultaneous work to independent teams", () => {
   assert.match(markup, /세 팀이 각자의 업무를 동시에 처리합니다/u);
   assert.match(markup, /DLD와 TopView를 분석해줘/u);
   assert.match(markup, /구현 패킷을 검토해줘/u);
+  assert.match(markup, /REVIEW FILES/u);
+  assert.match(markup, /사람 검토 대기 파일철/u);
   assert.match(markup, /Read buffer 코드를 수정해줘/u);
   assert.match(markup, /data-selected="true"/u);
+});
+
+test("human review pressure uses real queue depth and wait age without an explicit warning", () => {
+  const now = Date.parse("2026-07-22T02:00:00.000Z");
+  const freshHuman = [
+    { ...createJob("review-1", "구현 승인 1", "awaiting_coding_approval"), updatedAt: "2026-07-22T01:55:00.000Z" },
+    { ...createJob("review-2", "Git 승인 2", "changes_ready"), updatedAt: "2026-07-22T01:54:00.000Z" },
+  ];
+  const machineQueue = [
+    createJob("analysis-1", "분석 1", "queued"),
+    createJob("analysis-2", "분석 2", "queued"),
+    createJob("analysis-3", "분석 3", "queued"),
+  ];
+  const watched = getHumanBottleneckSnapshot([...freshHuman, ...machineQueue], now);
+  const aged = getHumanBottleneckSnapshot([
+    { ...freshHuman[0], updatedAt: "2026-07-22T01:20:00.000Z" },
+  ], now);
+  const clear = getHumanBottleneckSnapshot([], now);
+
+  assert.equal(watched.level, "watch");
+  assert.equal(watched.label, "검토 대기 파일철");
+  assert.equal(aged.level, "bottleneck");
+  assert.equal(aged.label, "검토 대기 파일철");
+  assert.equal(aged.oldestWaitMinutes, 40);
+  assert.match(aged.detail, /최장 40분/u);
+  assert.equal(clear.level, "clear");
+  assert.equal(clear.label, "검토 대기 없음");
 });
 
 test("Claude team shows a safe implementation plan and verified file targets", () => {

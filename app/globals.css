@@ -5030,6 +5030,191 @@ textarea:focus-visible {
   font-size: 11px;
 }
 
+.human-bottleneck {
+  display: grid;
+  gap: 10px;
+}
+
+.human-bottleneck__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid rgb(19 141 129 / 18%);
+  border-radius: 9px;
+  background: #f1faf7;
+}
+
+.human-bottleneck__symbol {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: #dff2ed;
+  color: var(--office-teal-dark);
+}
+
+.human-bottleneck__summary small,
+.human-bottleneck__summary strong,
+.human-bottleneck__summary p {
+  display: block;
+  margin: 0;
+}
+
+.human-bottleneck__summary small {
+  color: var(--office-teal-dark);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 820;
+  letter-spacing: .08em;
+}
+
+.human-bottleneck__summary strong {
+  margin-top: 1px;
+  color: var(--office-navy);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.human-bottleneck__summary p {
+  margin-top: 1px;
+  color: var(--office-ink-soft);
+  font-size: 10px;
+}
+
+.human-bottleneck[data-level="watch"] .human-bottleneck__summary {
+  border-color: rgb(196 132 34 / 26%);
+  background: #fff8e9;
+}
+
+.human-bottleneck[data-level="watch"] .human-bottleneck__symbol {
+  background: #ffedc9;
+  color: #8a5b15;
+}
+
+.human-bottleneck[data-level="watch"] .human-bottleneck__summary small {
+  color: #8a5b15;
+}
+
+.human-bottleneck[data-level="bottleneck"] .human-bottleneck__summary {
+  border-color: rgb(169 78 73 / 38%);
+  background: #fff1ec;
+  box-shadow: inset 3px 0 0 #b85d55;
+}
+
+.human-bottleneck[data-level="bottleneck"] .human-bottleneck__symbol {
+  background: #f8d8d1;
+  color: #97453f;
+}
+
+.human-bottleneck[data-level="bottleneck"] .human-bottleneck__summary small {
+  color: #97453f;
+}
+
+.human-file-stack {
+  position: relative;
+  min-height: 153px;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none;
+}
+
+.human-file-stack > li:not(.human-file-stack__overflow) {
+  position: absolute;
+  top: calc(var(--file-index) * 23px + 9px);
+  right: calc(var(--file-index) * 3px);
+  left: calc(var(--file-index) * 3px);
+  z-index: calc(var(--file-index) + 1);
+}
+
+.human-file-stack > li:not(.human-file-stack__overflow) button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 78px;
+  gap: 3px;
+  padding: 20px 11px 9px;
+  overflow: visible;
+  border: 1px solid #d8b571;
+  border-radius: 5px 9px 9px 9px;
+  background: linear-gradient(180deg, #fff8e6, #fffdf7);
+  box-shadow: 0 7px 13px rgb(82 58 25 / 10%);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--office-motion-fast) ease-out, border-color var(--office-motion-fast) ease-out;
+}
+
+.human-file-stack > li:not(.human-file-stack__overflow) button:hover,
+.human-file-stack > li[data-selected="true"] button {
+  border-color: #9c691f;
+  transform: translateX(3px);
+}
+
+.human-file-stack > li[data-selected="true"] button {
+  box-shadow: inset 3px 0 0 #9c691f, 0 7px 13px rgb(82 58 25 / 12%);
+}
+
+.human-file-stack__tab {
+  position: absolute;
+  top: -9px;
+  left: 9px;
+  min-width: 82px;
+  padding: 4px 9px 3px;
+  border: 1px solid #d8b571;
+  border-bottom: 0;
+  border-radius: 6px 9px 0 0;
+  background: #f7d894;
+  color: #68440e;
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: .02em;
+}
+
+.human-file-stack button > strong,
+.human-file-stack button > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.human-file-stack button > strong {
+  color: var(--office-navy);
+  font-size: 12px;
+  font-weight: 770;
+}
+
+.human-file-stack button > small {
+  color: var(--office-ink-soft);
+  font-size: 10px;
+}
+
+.human-file-stack__overflow {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  z-index: 8;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #fff1d7;
+  color: #795016;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.human-bottleneck[data-level="bottleneck"] .human-file-stack__tab {
+  border-color: #cb8880;
+  background: #efb6aa;
+  color: #71352f;
+}
+
+.human-bottleneck[data-level="bottleneck"] .human-file-stack > li:not(.human-file-stack__overflow) button {
+  border-color: #d9a19a;
+  background: linear-gradient(180deg, #fff0eb, #fffaf7);
+}
+
 .company-operations__handoff {
   position: absolute;
   z-index: 2;
