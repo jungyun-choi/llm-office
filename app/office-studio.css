@@ -875,6 +875,22 @@
   to { opacity: 1; transform: translateY(0) rotate(.45deg); }
 }
 
+@media (min-width: 901px) and (max-width: 1024px) {
+  .company-operations__lanes {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 10px;
+  }
+
+  .company-operations__handoff {
+    top: auto;
+    right: 50%;
+    bottom: -17px;
+    animation: none;
+    transform: translateX(50%) rotate(90deg);
+  }
+}
+
 @media (max-width: 900px) {
   .office-room.office-campus {
     width: min(100% - 20px, 760px);
