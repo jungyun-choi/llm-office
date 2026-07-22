@@ -8,6 +8,7 @@
 UI와 업무 상태 머신은 다시 만들 필요가 없다.
 
 - `POST/GET /api/v1/jobs` 기반 SQLite 영속 FIFO와 히스토리
+- Human Gate 0에서 확정한 `intakeBrief`의 SQLite 저장·분석 입력·coding packet 전달
 - OpenCode 분석실 → 사람 승인 → Claude 개발실 → 서버 테스트 → 사람 승인 → Git
 - 분석 패킷 digest와 변경 digest에 묶인 optimistic version 승인
 - 업무별 `ai-office/<job-id>` Git branch와 repository 밖 전용 worktree
@@ -95,8 +96,11 @@ CLI에서 실제로 성립하는지 검증한다.
 현재 `LocalJobExecutor`는 Claude Code CLI용 기본 adapter다. 회사 Claude CLI가 호환되면
 환경 설정만 교체하고, 다르면 `JobExecutionPort` 구현을 추가한다.
 
-- coding packet은 분석 결과와 명시적 allowlist만 포함한다.
+- coding packet은 사용자 확정 `intakeBrief`, 분석 결과와 명시적 allowlist만 포함한다.
 - 회사 profile에서만 실제 요청 원문을 전달한다.
+- 사내 coding adapter는 `codingPacket.intakeBrief`를 Claude의 짧은 요구사항 원본으로 사용하고,
+  별도 재요약으로 의미를 바꾸지 않는다. 합성 profile은 이 필드를 외부 모델 입력에서 합성
+  feature spec으로 치환하는 현재 경계를 유지한다.
 - Claude는 업무 worktree만 수정하고 Commit/Push는 하지 않는다.
 - 서버가 변경 경로, HEAD, symlink, bounded Diff를 다시 검증한다.
 - 테스트 명령은 모델 출력이 아니라 서버의 command-id allowlist로 선택한다.

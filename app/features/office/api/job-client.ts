@@ -4,6 +4,7 @@ import type {
   OfficeCapabilities,
   OfficeJob,
   OfficeJobAction,
+  OfficeRequestInput,
   PublishMode,
 } from "../types";
 
@@ -33,11 +34,15 @@ export async function getOfficeJobCapabilities(signal: AbortSignal): Promise<Off
   return parseCapabilities(payload);
 }
 
-export async function createOfficeJob(prompt: string, signal: AbortSignal): Promise<OfficeJob> {
+export async function createOfficeJob(input: OfficeRequestInput, signal: AbortSignal): Promise<OfficeJob> {
   const payload = await requestJson(JOBS_API_BASE, {
     method: "POST",
     headers: createMutationHeaders(),
-    body: JSON.stringify({ prompt, executionMode: "auto" }),
+    body: JSON.stringify({
+      prompt: input.request,
+      executionMode: "auto",
+      ...(input.intakeBrief ? { intakeBrief: input.intakeBrief } : {}),
+    }),
   }, signal);
   return parseJobPayload(payload);
 }

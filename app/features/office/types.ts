@@ -127,8 +127,18 @@ export interface OfficeResult {
   notices: readonly string[];
 }
 
+export interface OrbitIntakeBrief {
+  version: "1";
+  objective: string;
+  currentAndExpectedBehavior?: string;
+  repositoryContext?: string;
+  acceptanceAndTests?: string;
+  assumptions: readonly string[];
+}
+
 export interface OfficeRequestInput {
   request: string;
+  intakeBrief?: OrbitIntakeBrief;
 }
 
 export interface OfficeTask {
@@ -243,6 +253,7 @@ export interface OfficeResultPreview {
 export interface OfficeJob {
   id: string;
   prompt: string;
+  intakeBrief?: OrbitIntakeBrief;
   state: OfficeJobState;
   createdAt: string;
   updatedAt?: string;

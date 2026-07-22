@@ -58,6 +58,7 @@ export class JobService {
     const fingerprint = await digest(JSON.stringify({
       prompt: normalizeWhitespace(input.prompt),
       executionMode: input.executionMode,
+      intakeBrief: input.intakeBrief,
     }));
     const existing = this.repository.findByIdempotencyKey(idempotencyKey);
     if (existing) {
@@ -86,6 +87,7 @@ export class JobService {
       idempotencyKey,
       requestFingerprint: fingerprint,
       prompt: input.prompt,
+      intakeBrief: input.intakeBrief,
       executionMode: input.executionMode,
       state: "queued",
       version: 1,
@@ -244,6 +246,7 @@ export class JobService {
           ? job.prompt
           : toSyntheticFeatureRequest(job.prompt),
       },
+      intakeBrief: job.intakeBrief,
       brief: analysis.brief,
       roleOutputs: analysis.roleOutputs,
       analysisRunId: analysis.runId,
@@ -268,6 +271,7 @@ export class JobService {
       state: record.state,
       version: record.version,
       prompt: record.prompt,
+      intakeBrief: record.intakeBrief,
       executionMode: record.executionMode,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

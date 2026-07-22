@@ -8,6 +8,13 @@ const BASE_JOB = {
   state: "changes_ready",
   version: 7,
   prompt: "read buffer를 늘려줘",
+  intakeBrief: {
+    version: "1",
+    objective: "Read buffer를 2MB로 확장",
+    repositoryContext: "FTL/read_buffer와 TopView",
+    acceptanceAndTests: "경계 및 회귀 테스트 통과",
+    assumptions: [],
+  },
   executionMode: "auto",
   createdAt: "2026-07-22T00:00:00.000Z",
   updatedAt: "2026-07-22T00:01:00.000Z",
@@ -68,6 +75,8 @@ test("bare and wrapped JobDTO responses are normalized", () => {
   assert.equal(bare.coding?.test?.status, "passed");
   assert.equal(bare.coding?.pullRequestNumber, 4);
   assert.equal(bare.coding?.reviewRound, 2);
+  assert.equal(bare.intakeBrief?.objective, "Read buffer를 2MB로 확장");
+  assert.match(bare.intakeBrief?.repositoryContext ?? "", /TopView/u);
   assert.equal(bare.codingPlan?.objective, "Read buffer 경계를 안전하게 확장");
   assert.deepEqual(bare.codingPlan?.allowedPaths, ["poc/simulator/src", "[workspace-path]"]);
   assert.match(bare.codingPlan?.scope[1] ?? "", /\[workspace-path\]/u);

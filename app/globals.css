@@ -1664,6 +1664,241 @@ textarea:focus-visible {
   color: #a94e49;
 }
 
+.task-composer__quick {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  gap: 6px;
+  padding: 0 4px;
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--office-teal-dark);
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.task-composer__quick small {
+  color: var(--office-ink-faint);
+  font-size: 9px;
+  font-weight: 560;
+}
+
+.task-composer__quick:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.task-composer--meeting {
+  padding: 18px;
+  border-color: rgb(19 141 129 / 38%);
+  background: linear-gradient(145deg, rgb(255 253 248 / 98%), rgb(238 249 246 / 97%));
+}
+
+.orbit-meeting__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.orbit-meeting__avatar {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgb(19 141 129 / 24%);
+  border-radius: 12px;
+  background: var(--office-teal-pale);
+  color: var(--office-teal-dark);
+}
+
+.orbit-meeting__header small,
+.orbit-meeting__header strong,
+.orbit-meeting__header p {
+  display: block;
+  margin: 0;
+}
+
+.orbit-meeting__header small {
+  margin-bottom: 3px;
+  color: var(--office-teal-dark);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.orbit-meeting__header strong {
+  color: var(--office-navy);
+  font-size: 16px;
+  letter-spacing: -.025em;
+}
+
+.orbit-meeting__header p {
+  margin-top: 3px;
+  color: var(--office-ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.orbit-meeting__close {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--office-line);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 65%);
+  color: var(--office-ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.orbit-question,
+.orbit-brief {
+  padding: 14px;
+  margin-top: 14px;
+  border: 1px solid rgb(11 34 50 / 11%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 75%);
+}
+
+.orbit-question__progress {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 11px;
+}
+
+.orbit-question__progress span {
+  width: 28px;
+  height: 3px;
+  border-radius: 99px;
+  background: #d9ded9;
+}
+
+.orbit-question__progress span.is-active {
+  background: var(--office-teal);
+}
+
+.orbit-question__request,
+.orbit-brief__request {
+  display: flex;
+  overflow: hidden;
+  gap: 8px;
+  margin: 0 0 11px;
+  color: var(--office-ink-soft);
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orbit-question__request span,
+.orbit-brief__request span {
+  flex: 0 0 auto;
+  color: var(--office-teal-dark);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.orbit-question label {
+  display: block;
+  color: var(--office-navy);
+  font-size: 15px;
+  font-weight: 780;
+  letter-spacing: -.02em;
+}
+
+.orbit-question > small {
+  display: block;
+  margin: 4px 0 9px;
+  color: var(--office-ink-faint);
+  font-size: 10px;
+}
+
+.orbit-question textarea {
+  min-height: 64px;
+  max-height: 110px;
+  padding: 10px 11px;
+  border: 1px solid var(--office-line);
+  border-radius: 10px;
+  background: #fbfaf5;
+  font-size: 13px;
+}
+
+.orbit-question textarea:focus {
+  border-color: rgb(19 141 129 / 58%);
+  box-shadow: 0 0 0 3px rgb(19 141 129 / 9%);
+}
+
+.orbit-question__actions,
+.orbit-brief__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.orbit-question__actions button,
+.orbit-brief__actions button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--office-line);
+  border-radius: 9px;
+  background: #fffdf8;
+  color: var(--office-ink-soft);
+  font-size: 11px;
+  font-weight: 730;
+  cursor: pointer;
+}
+
+.orbit-question__actions button.is-primary,
+.orbit-brief__actions button.is-primary {
+  border-color: var(--office-navy);
+  background: var(--office-navy);
+  color: white;
+}
+
+.orbit-question__actions button:disabled,
+.orbit-brief__actions button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.orbit-brief dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.orbit-brief dl > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(238 249 246 / 72%);
+}
+
+.orbit-brief dt {
+  color: var(--office-teal-dark);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.orbit-brief dd {
+  margin: 0;
+  color: var(--office-ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .is-spinning {
   animation: spin 760ms linear infinite;
 }

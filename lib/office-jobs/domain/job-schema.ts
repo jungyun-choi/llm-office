@@ -4,8 +4,33 @@ import { createPocRunSchema } from "../../poc/domain/poc-schema";
 const idempotencyPattern = /^[a-zA-Z0-9._:-]{8,128}$/u;
 const digestPattern = /^[a-f0-9]{64}$/u;
 const jobIdPattern = /^[a-f0-9-]{36}$/u;
+const probableSecret =
+  /(?:-----BEGIN [A-Z ]*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|authorization\s*:\s*bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[=:]\s*\S{8,})/iu;
 
-export const createJobSchema = createPocRunSchema;
+const conciseBriefText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(700)
+  .refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/u.test(value), {
+    message: "브리프에 제어 문자를 사용할 수 없습니다.",
+  })
+  .refine((value) => !probableSecret.test(value), {
+    message: "브리프에 비밀값으로 보이는 내용이 있습니다.",
+  });
+
+export const orbitIntakeBriefSchema = z.object({
+  version: z.literal("1"),
+  objective: conciseBriefText.max(500),
+  currentAndExpectedBehavior: conciseBriefText.optional(),
+  repositoryContext: conciseBriefText.optional(),
+  acceptanceAndTests: conciseBriefText.optional(),
+  assumptions: z.array(conciseBriefText.max(240)).max(4),
+}).strict();
+
+export const createJobSchema = createPocRunSchema.extend({
+  intakeBrief: orbitIntakeBriefSchema.optional(),
+}).strict();
 
 const actionBase = z.object({
   expectedVersion: z.number().int().min(1),

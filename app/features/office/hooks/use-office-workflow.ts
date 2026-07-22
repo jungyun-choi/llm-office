@@ -135,7 +135,7 @@ export function useOfficeWorkflow(): OfficeWorkflowState {
     setActionError(null);
     const controller = new AbortController();
     try {
-      const job = await createOfficeJob(input.request, controller.signal);
+      const job = await createOfficeJob(input, controller.signal);
       setJobs((current) => upsertJob(current, job));
       setSelectedJobId(job.id);
       setConnectionMode("server");

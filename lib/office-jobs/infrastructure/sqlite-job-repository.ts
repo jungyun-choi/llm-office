@@ -110,7 +110,7 @@ export class SqliteJobRepository implements JobRepository {
   create(record: JobRecord): JobRecord {
     this.database.prepare(`
       INSERT INTO office_jobs (
-        id, idempotency_key, request_fingerprint, prompt, execution_mode, state,
+        id, idempotency_key, request_fingerprint, prompt, intake_brief_json, execution_mode, state,
         version, queue_order, created_at, updated_at, analysis_json,
         analysis_stages_json, coding_packet_json, base_sha, worktree_path, branch_name, claude_model,
         claude_output, changed_files_json, diff_text, diff_truncated,
@@ -119,7 +119,7 @@ export class SqliteJobRepository implements JobRepository {
         pull_request_error, review_feedback, review_round, issue_url, issue_error,
         error_json, cancel_requested, attempts
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(...jobValues(record));
     return record;
@@ -266,7 +266,7 @@ export class SqliteJobRepository implements JobRepository {
     const next: JobRecord = { ...current, ...patch, id, version: current.version + 1 };
     const result = this.database.prepare(`
         UPDATE office_jobs SET
-          idempotency_key = ?, request_fingerprint = ?, prompt = ?, execution_mode = ?, state = ?,
+          idempotency_key = ?, request_fingerprint = ?, prompt = ?, intake_brief_json = ?, execution_mode = ?, state = ?,
           version = ?, queue_order = ?, created_at = ?, updated_at = ?, analysis_json = ?,
           analysis_stages_json = ?, coding_packet_json = ?, base_sha = ?, worktree_path = ?, branch_name = ?, claude_model = ?,
           claude_output = ?, changed_files_json = ?, diff_text = ?, diff_truncated = ?,
@@ -332,6 +332,7 @@ export class SqliteJobRepository implements JobRepository {
         idempotency_key TEXT NOT NULL UNIQUE,
         request_fingerprint TEXT NOT NULL,
         prompt TEXT NOT NULL,
+        intake_brief_json TEXT,
         execution_mode TEXT NOT NULL,
         state TEXT NOT NULL,
         version INTEGER NOT NULL,
@@ -395,6 +396,7 @@ export class SqliteJobRepository implements JobRepository {
       "analysis_stages_json",
       "ALTER TABLE office_jobs ADD COLUMN analysis_stages_json TEXT NOT NULL DEFAULT '[]'",
     );
+    this.ensureColumn("intake_brief_json", "ALTER TABLE office_jobs ADD COLUMN intake_brief_json TEXT");
     this.ensureColumn(
       "changes_manifest_json",
       "ALTER TABLE office_jobs ADD COLUMN changes_manifest_json TEXT",
@@ -432,6 +434,7 @@ function jobValues(record: JobRecord): SqlValue[] {
     record.idempotencyKey,
     record.requestFingerprint,
     record.prompt,
+    jsonValue(record.intakeBrief),
     record.executionMode,
     record.state,
     record.version,
@@ -475,6 +478,7 @@ function rowToJob(row: DatabaseRow): JobRecord {
     idempotencyKey: stringValue(row.idempotency_key),
     requestFingerprint: stringValue(row.request_fingerprint),
     prompt: stringValue(row.prompt),
+    intakeBrief: parseJson(row.intake_brief_json),
     executionMode: stringValue(row.execution_mode) as JobRecord["executionMode"],
     state: stringValue(row.state) as JobState,
     version: numberValue(row.version),

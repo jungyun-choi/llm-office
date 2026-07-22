@@ -4,6 +4,7 @@ import { JobService, toErrorSnapshot } from "./job-service";
 import { JobError } from "../domain/job-errors";
 import type { AgentRuntimeProgress } from "../../poc/application/ports/agent-runtime";
 import { isSafeCompanyOutputText } from "../../poc/infrastructure/company-output-boundary";
+import { buildAnalysisRequest } from "../domain/orbit-intake";
 
 const WORKER_LANES = ["analysis", "development"] as const;
 type WorkerLane = (typeof WORKER_LANES)[number];
@@ -106,7 +107,7 @@ export class JobWorker {
         updatedAt: new Date().toISOString(),
       });
       const analysis = await this.executor.runAnalysis(
-        current.prompt,
+        buildAnalysisRequest(current.prompt, current.intakeBrief),
         current.executionMode,
         `analysis:${current.id}:${current.attempts}`,
         signal,

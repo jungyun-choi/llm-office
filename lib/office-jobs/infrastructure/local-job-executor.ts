@@ -528,13 +528,16 @@ function claudeArguments(config: JobRuntimeConfig): string[] {
 export function buildClaudePrompt(job: JobRecord, config: JobRuntimeConfig): string {
   const packet = job.codingPacket;
   if (!packet) throw executionError("INVALID_CODING_PACKET", "코딩 패킷이 없습니다.", "coding", false);
-    const payload = {
+  const payload = {
     deterministicFeatureSpec: packet.request.normalizedFeature,
+    confirmedTaskBrief: packet.request.originalIncluded
+      ? packet.intakeBrief
+      : { version: "1", objective: packet.request.normalizedFeature },
     sourceCommit: packet.sourceCommit,
     allowedPaths: packet.allowedPaths,
     executorVersion: packet.executionPolicy.executorVersion,
-      testCommandId: packet.executionPolicy.testCommandId,
-      reviewFeedback: job.reviewFeedback,
+    testCommandId: packet.executionPolicy.testCommandId,
+    reviewFeedback: job.reviewFeedback,
     constraints: [
       "Python standard library only",
       "deterministic behavior",

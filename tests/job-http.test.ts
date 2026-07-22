@@ -248,13 +248,15 @@ describe("job analysis progress persistence", () => {
     const repository = new SqliteJobRepository(":memory:");
     const frameworkRunning = deferred<void>();
     const releaseAnalysis = deferred<void>();
+    let receivedAnalysisPrompt = "";
     const analysis = await runHostedPoc({
       prompt: "합성 버퍼 진행 상태를 검증해 주세요",
       executionMode: "demo",
     });
     const executor: JobExecutionPort = {
       resolveBaseSha: async () => "a".repeat(40),
-      runAnalysis: async (_prompt, _mode, _key, _signal, onProgress) => {
+      runAnalysis: async (prompt, _mode, _key, _signal, onProgress) => {
+        receivedAnalysisPrompt = prompt;
         await onProgress?.({
           role: "research",
           status: "running",
@@ -313,6 +315,13 @@ describe("job analysis progress persistence", () => {
         body: JSON.stringify({
           prompt: "회사 버퍼 분석 진행 상태를 확인해 주세요",
           executionMode: "demo",
+          intakeBrief: {
+            version: "1",
+            objective: "Read buffer를 2MB로 확장",
+            repositoryContext: "FTL/read_buffer와 TopView read scenario",
+            acceptanceAndTests: "기존 경계 회귀 테스트 통과",
+            assumptions: [],
+          },
         }),
       }));
       const created = await createdResponse.json() as { id: string };
@@ -322,6 +331,9 @@ describe("job analysis progress persistence", () => {
       const stored = repository.get(created.id);
       assert.ok(stored);
       assert.equal(stored.state, "analyzing");
+      assert.equal(stored.intakeBrief?.objective, "Read buffer를 2MB로 확장");
+      assert.match(receivedAnalysisPrompt, /\[ORBIT_CONFIRMED_BRIEF\]/u);
+      assert.match(receivedAnalysisPrompt, /TopView read scenario/u);
       assert.deepEqual(
         stored.analysisStages.slice(0, 3).map((stage) => ({
           id: stage.id,

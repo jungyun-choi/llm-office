@@ -13,6 +13,7 @@ import type {
   OfficeJobError,
   OfficeJobEvent,
   OfficeJobState,
+  OrbitIntakeBrief,
 } from "../types";
 
 const recordSchema = z.record(z.string(), z.unknown());
@@ -91,6 +92,7 @@ function normalizeJob(
   return {
     id,
     prompt: readString(record, ["prompt", "request", "title"]) ?? "내용이 보호된 업무",
+    intakeBrief: normalizeIntakeBrief(record.intakeBrief ?? record.intake_brief),
     state,
     createdAt: readString(record, ["createdAt", "created_at", "submittedAt"]) ?? new Date(0).toISOString(),
     updatedAt: readString(record, ["updatedAt", "updated_at"]),
@@ -109,6 +111,21 @@ function normalizeJob(
     version: readNumber(record, ["version"]),
     codingPacketDigest: readString(record, ["codingPacketDigest", "coding_packet_digest"])
       ?? readDigest(codingPacket),
+  };
+}
+
+function normalizeIntakeBrief(value: unknown): OrbitIntakeBrief | undefined {
+  const record = asRecord(value);
+  if (!record || record.version !== "1") return undefined;
+  const objective = readString(record, ["objective"]);
+  if (!objective) return undefined;
+  return {
+    version: "1",
+    objective: objective.slice(0, 500),
+    currentAndExpectedBehavior: readString(record, ["currentAndExpectedBehavior", "current_and_expected_behavior"])?.slice(0, 700),
+    repositoryContext: readString(record, ["repositoryContext", "repository_context"])?.slice(0, 700),
+    acceptanceAndTests: readString(record, ["acceptanceAndTests", "acceptance_and_tests"])?.slice(0, 700),
+    assumptions: normalizeBoundedStrings(record.assumptions, 4, 240),
   };
 }
 

@@ -81,7 +81,7 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
         <article className="claude-activity__current">
           <span><CircleDot size={14} aria-hidden="true" />현재 작업</span>
           <strong>{getClaudeCurrentTask(job)}</strong>
-          <p>{job.codingPlan?.objective ?? job.coding?.summary ?? getLatestEvent(job)}</p>
+          <p>{job.intakeBrief?.objective ?? job.codingPlan?.objective ?? job.coding?.summary ?? getLatestEvent(job)}</p>
         </article>
         <article className="claude-activity__plan">
           <span><ListChecks size={14} aria-hidden="true" />구현 계획</span>

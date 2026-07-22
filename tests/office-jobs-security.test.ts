@@ -54,6 +54,12 @@ test("synthetic Claude prompt excludes raw request and free-form analysis", asyn
   const config = syntheticConfig();
   const service = new JobService(repository, inertExecutor(), config);
   const job = baseJob(`${rawMarker} 합성 버퍼 기능을 추가해 주세요`);
+  job.intakeBrief = {
+    version: "1",
+    objective: `${rawMarker} 사용자가 확정한 목표`,
+    repositoryContext: `${rawMarker} 내부 DLD와 TopView`,
+    assumptions: [],
+  };
   const packet = await service.buildCodingPacket(job, analysis);
   assert.match(packet.executionPolicy.repositoryFingerprint, /^[a-f0-9]{64}$/u);
   assert.equal(packet.executionPolicy.profile, "synthetic");
@@ -63,8 +69,40 @@ test("synthetic Claude prompt excludes raw request and free-form analysis", asyn
   const prompt = buildClaudePrompt({ ...job, codingPacket: packet }, config);
   assert.doesNotMatch(prompt, new RegExp(rawMarker, "u"));
   assert.doesNotMatch(prompt, new RegExp(analysisMarker, "u"));
+  assert.doesNotMatch(prompt, new RegExp(rawMarker, "u"));
+  assert.match(prompt, /confirmedTaskBrief/u);
   assert.match(prompt, /deterministicFeatureSpec/u);
   assert.match(prompt, /sourceCommit/u);
+  repository.close();
+});
+
+test("internal coding packet gives Claude the same confirmed Orbit brief", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const config: JobRuntimeConfig = {
+    ...syntheticConfig(),
+    profile: "internal",
+    internalExecutionAcknowledged: true,
+  };
+  const service = new JobService(repository, inertExecutor(), config);
+  const analysis = await runHostedPoc({
+    prompt: "합성 버퍼 기능을 검증해 주세요",
+    executionMode: "demo",
+  });
+  const job = baseJob("Read buffer를 2MB로 확장해 주세요");
+  job.intakeBrief = {
+    version: "1",
+    objective: "Read buffer를 2MB로 확장",
+    repositoryContext: "FTL/read_buffer, .LLM DLD, TopView read scenario",
+    acceptanceAndTests: "기존 1MB 회귀와 2MB 경계 테스트 통과",
+    assumptions: [],
+  };
+
+  const packet = await service.buildCodingPacket(job, analysis);
+  const prompt = buildClaudePrompt({ ...job, codingPacket: packet }, config);
+
+  assert.deepEqual(packet.intakeBrief, job.intakeBrief);
+  assert.match(prompt, /Read buffer를 2MB로 확장/u);
+  assert.match(prompt, /TopView read scenario/u);
   repository.close();
 });
 
@@ -101,7 +139,14 @@ test("change digest uses full sorted content manifest and deletion markers", asy
 test("action state and idempotency record commit atomically", () => {
   const repository = new SqliteJobRepository(":memory:");
   const job = baseJob("합성 버퍼 기능을 추가해 주세요");
+  job.intakeBrief = {
+    version: "1",
+    objective: "합성 버퍼 기능 추가",
+    repositoryContext: "FTL과 TopView 확인",
+    assumptions: [],
+  };
   repository.create(job);
+  assert.deepEqual(repository.get(job.id)?.intakeBrief, job.intakeBrief);
   const first = repository.updateWithAction(
     job.id,
     job.version,

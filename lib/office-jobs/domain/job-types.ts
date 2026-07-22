@@ -59,6 +59,15 @@ export interface JobErrorSnapshot {
   stage: "analysis" | "coding" | "testing" | "publishing" | "queue";
 }
 
+export interface OrbitIntakeBrief {
+  version: "1";
+  objective: string;
+  currentAndExpectedBehavior?: string;
+  repositoryContext?: string;
+  acceptanceAndTests?: string;
+  assumptions: string[];
+}
+
 export interface CodingPacket {
   schemaVersion: "1";
   digest: string;
@@ -69,6 +78,7 @@ export interface CodingPacket {
     originalIncluded: boolean;
     normalizedFeature: string;
   };
+  intakeBrief?: OrbitIntakeBrief;
   brief: PocRunResult["brief"];
   roleOutputs: PocRunResult["roleOutputs"];
   analysisRunId: string;
@@ -88,6 +98,7 @@ export interface JobRecord {
   idempotencyKey: string;
   requestFingerprint: string;
   prompt: string;
+  intakeBrief?: OrbitIntakeBrief;
   executionMode: JobExecutionMode;
   state: JobState;
   version: number;
@@ -188,6 +199,7 @@ export interface JobDto {
   state: JobState;
   version: number;
   prompt: string;
+  intakeBrief?: OrbitIntakeBrief;
   executionMode: JobExecutionMode;
   createdAt: string;
   updatedAt: string;

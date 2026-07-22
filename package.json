@@ -20,7 +20,7 @@
     "poc:bridge:office:poc": "AI_OFFICE_LOCAL_RUNNER_ENABLED=1 AI_OFFICE_AGENT_RUNTIME=opencode AI_OFFICE_OPENCODE_PROFILE=zen AI_OFFICE_ZEN_SHARED_STATE_ACK=synthetic-only AI_OFFICE_CODING_ENABLED=1 AI_OFFICE_CLAUDE_PROFILE=synthetic tsx scripts/poc-bridge.ts",
     "poc:bridge:internal": "AI_OFFICE_LOCAL_RUNNER_ENABLED=1 AI_OFFICE_AGENT_RUNTIME=opencode tsx scripts/poc-bridge.ts",
     "poc:simulator:test": "python3 -m unittest discover -s poc/simulator/tests -p 'test_*.py'",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --import tsx --test tests/poc-runtime.test.ts tests/job-http.test.ts tests/office-jobs-security.test.ts tests/sequential-agent-runtime.test.ts tests/company-extension-boundary.test.ts tests/company-opencode-runtime.test.ts app/features/office/api/poc-client.test.ts app/features/office/api/job-contract.test.ts app/features/office/api/map-poc-result.test.ts app/features/office/components/office-status.test.tsx app/features/office/hooks/use-office-workflow.test.ts",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --import tsx --test tests/poc-runtime.test.ts tests/job-http.test.ts tests/office-jobs-security.test.ts tests/sequential-agent-runtime.test.ts tests/company-extension-boundary.test.ts tests/company-opencode-runtime.test.ts app/features/office/api/poc-client.test.ts app/features/office/api/job-contract.test.ts app/features/office/api/map-poc-result.test.ts app/features/office/components/office-status.test.tsx app/features/office/hooks/use-office-workflow.test.ts app/features/office/orbit-intake.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
