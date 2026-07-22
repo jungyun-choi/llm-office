@@ -5,10 +5,18 @@ import { JobError } from "../domain/job-errors";
 import type { AgentRuntimeProgress } from "../../poc/application/ports/agent-runtime";
 import { isSafeCompanyOutputText } from "../../poc/infrastructure/company-output-boundary";
 
+const WORKER_LANES = ["analysis", "development"] as const;
+type WorkerLane = (typeof WORKER_LANES)[number];
+
+const LANE_STATES: Record<WorkerLane, readonly JobState[]> = {
+  analysis: ["queued"],
+  development: ["coding_queued", "publishing"],
+};
+
 export class JobWorker {
-  private running = false;
   private stopped = false;
-  private scheduled = false;
+  private readonly runningLanes = new Set<WorkerLane>();
+  private readonly scheduledLanes = new Set<WorkerLane>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly idleWaiters: Array<() => void> = [];
 
@@ -31,32 +39,38 @@ export class JobWorker {
   async stop(): Promise<void> {
     this.stopped = true;
     for (const controller of this.controllers.values()) controller.abort();
-    if (!this.running) return;
+    if (this.runningLanes.size === 0) return;
     await new Promise<void>((resolve) => this.idleWaiters.push(resolve));
   }
 
   wake(): void {
-    if (this.stopped || this.scheduled) return;
-    this.scheduled = true;
+    for (const lane of WORKER_LANES) this.wakeLane(lane);
+  }
+
+  private wakeLane(lane: WorkerLane): void {
+    if (this.stopped || this.scheduledLanes.has(lane) || this.runningLanes.has(lane)) return;
+    this.scheduledLanes.add(lane);
     setImmediate(() => {
-      this.scheduled = false;
-      void this.drain();
+      this.scheduledLanes.delete(lane);
+      void this.drain(lane);
     });
   }
 
-  private async drain(): Promise<void> {
-    if (this.running || this.stopped) return;
-    this.running = true;
+  private async drain(lane: WorkerLane): Promise<void> {
+    if (this.runningLanes.has(lane) || this.stopped) return;
+    this.runningLanes.add(lane);
     try {
       while (!this.stopped) {
-        const next = this.repository.nextRunnable();
+        const next = this.repository.nextRunnable(LANE_STATES[lane]);
         if (!next) break;
         await this.run(next);
       }
     } finally {
-      this.running = false;
-      for (const resolve of this.idleWaiters.splice(0)) resolve();
-      if (!this.stopped && this.repository.nextRunnable()) this.wake();
+      this.runningLanes.delete(lane);
+      if (this.runningLanes.size === 0) {
+        for (const resolve of this.idleWaiters.splice(0)) resolve();
+      }
+      if (!this.stopped && this.repository.nextRunnable(LANE_STATES[lane])) this.wakeLane(lane);
     }
   }
 
@@ -73,7 +87,7 @@ export class JobWorker {
   }
 
   private async analyze(job: JobRecord, signal: AbortSignal): Promise<void> {
-    let current = this.transition(job, "analyzing", "분석 사무실이 업무를 시작했습니다.", {
+    let current = this.transition(job, "analyzing", "OpenCode 분석팀이 업무를 시작했습니다.", {
       queueOrder: undefined,
       attempts: job.attempts + 1,
       analysisStages: job.analysisStages.map((stage) => stage.id === "research" ? {
@@ -120,7 +134,7 @@ export class JobWorker {
   }
 
   private async codeAndTest(job: JobRecord, signal: AbortSignal): Promise<void> {
-    let current = this.transition(job, "coding", "Claude 개발 사무실이 코딩을 시작했습니다.", {
+    let current = this.transition(job, "coding", "Claude 개발팀이 코딩을 시작했습니다.", {
       queueOrder: undefined,
       attempts: job.attempts + 1,
     });

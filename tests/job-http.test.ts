@@ -3,6 +3,7 @@ import { afterEach, describe, test } from "node:test";
 import { JobService } from "../lib/office-jobs/application/job-service";
 import { JobWorker } from "../lib/office-jobs/application/job-worker";
 import type { JobExecutionPort } from "../lib/office-jobs/application/job-execution.port";
+import type { JobRecord, JobState } from "../lib/office-jobs/domain/job-types";
 import { JobError, jobNotFound, staleJobVersion } from "../lib/office-jobs/domain/job-errors";
 import { LocalJobController } from "../lib/office-jobs/http/local-job-controller";
 import {
@@ -359,6 +360,55 @@ describe("job analysis progress persistence", () => {
   });
 });
 
+describe("parallel office worker lanes", () => {
+  test("analysis and development process different jobs concurrently", async () => {
+    const repository = new SqliteJobRepository(":memory:");
+    const analysisStarted = deferred<void>();
+    const codingStarted = deferred<void>();
+    const executor: JobExecutionPort = {
+      resolveBaseSha: async () => "a".repeat(40),
+      runAnalysis: async (_prompt, _mode, _key, signal) => {
+        analysisStarted.resolve();
+        return waitForAbort(signal);
+      },
+      isClaudeAvailable: async () => true,
+      runCoding: async (_job, signal) => {
+        codingStarted.resolve();
+        return waitForAbort(signal);
+      },
+      runTests: async () => {
+        throw new Error("tests must not run before coding completes");
+      },
+      publish: async () => {
+        throw new Error("publish must not run in this test");
+      },
+      mergePullRequest: async () => {
+        throw new Error("merge must not run in this test");
+      },
+      cleanup: async () => undefined,
+    };
+    const service = new JobService(repository, executor, getJobRuntimeConfig());
+    const worker = new JobWorker(repository, executor, service);
+    const analysisJob = runnableJob("analysis-lane-job", "queued", 1);
+    const codingJob = runnableJob("development-lane-job", "coding_queued", 2);
+    repository.create(analysisJob);
+    repository.create(codingJob);
+    worker.start();
+
+    try {
+      await withTimeout(
+        Promise.all([analysisStarted.promise, codingStarted.promise]),
+        "both worker lanes did not start",
+      );
+      assert.equal(repository.get(analysisJob.id)?.state, "analyzing");
+      assert.equal(repository.get(codingJob.id)?.state, "coding");
+    } finally {
+      await worker.stop();
+      repository.close();
+    }
+  });
+});
+
 function enableProxy(): void {
   process.env.AI_OFFICE_LOCAL_PROXY_ENABLED = "1";
   process.env.AI_OFFICE_BRIDGE_TOKEN = bridgeToken;
@@ -416,4 +466,36 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     if (Date.now() >= deadline) throw new Error("job did not reach the expected state");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+}
+
+function waitForAbort(signal?: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    const abort = () => reject(new Error("worker stopped"));
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function runnableJob(id: string, state: JobState, queueOrder: number): JobRecord {
+  const now = "2026-07-22T00:00:00.000Z";
+  return {
+    id,
+    idempotencyKey: `${id}-idempotency`,
+    requestFingerprint: `${id}-fingerprint`,
+    prompt: `${id} request`,
+    executionMode: "demo",
+    state,
+    version: 0,
+    queueOrder,
+    createdAt: now,
+    updatedAt: now,
+    analysisStages: [],
+    changedFiles: [],
+    diffTruncated: false,
+    testStatus: "not_run",
+    testOutputTruncated: false,
+    reviewRound: 0,
+    cancelRequested: false,
+    attempts: 0,
+  };
 }

@@ -201,13 +201,15 @@ export class SqliteJobRepository implements JobRepository {
     return { active: numberValue(active.total), queued: numberValue(queued.total) };
   }
 
-  nextRunnable(): JobRecord | undefined {
+  nextRunnable(states: readonly JobState[] = ["queued", "coding_queued", "publishing"]): JobRecord | undefined {
+    if (states.length === 0) return undefined;
+    const placeholders = states.map(() => "?").join(",");
     const row = this.database.prepare(`
       SELECT * FROM office_jobs
-      WHERE state IN ('queued','coding_queued','publishing') AND cancel_requested = 0
+      WHERE state IN (${placeholders}) AND cancel_requested = 0
       ORDER BY queue_order ASC, created_at ASC
       LIMIT 1
-    `).get() as DatabaseRow | undefined;
+    `).get(...states) as DatabaseRow | undefined;
     return row ? rowToJob(row) : undefined;
   }
 

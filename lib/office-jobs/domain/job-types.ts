@@ -276,7 +276,7 @@ export interface JobCapabilities {
   queue: {
     persistent: true;
     storage: "sqlite";
-    discipline: "fifo";
+    discipline: "lane-fifo";
     maxActiveJobs: number;
     activeJobs: number;
     queuedJobs: number;
@@ -315,7 +315,7 @@ export interface JobRepository {
   findByIdempotencyKey(key: string): JobRecord | undefined;
   list(query: JobListQuery): JobListResult;
   stats(): JobQueueStats;
-  nextRunnable(): JobRecord | undefined;
+  nextRunnable(states?: readonly JobState[]): JobRecord | undefined;
   queuePosition(id: string): number | undefined;
   nextQueueOrder(): number;
   update(id: string, expectedVersion: number, patch: Partial<JobRecord>): JobRecord;

@@ -105,7 +105,7 @@ export class JobService {
     this.repository.appendEvent(record.id, {
       kind: "state",
       state: record.state,
-      message: "분석 사무실 대기열에 업무를 등록했습니다.",
+      message: "OpenCode 분석팀 대기열에 업무를 등록했습니다.",
       createdAt: now,
     });
     this.wakeHandler();
@@ -195,7 +195,7 @@ export class JobService {
       queue: {
         persistent: true,
         storage: "sqlite",
-        discipline: "fifo",
+        discipline: "lane-fifo",
         maxActiveJobs: this.config.maxActiveJobs,
         activeJobs: stats.active,
         queuedJobs: stats.queued,
