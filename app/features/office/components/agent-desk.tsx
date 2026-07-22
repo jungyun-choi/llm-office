@@ -26,10 +26,37 @@ interface AgentDeskProps {
   state: AgentFlowState;
   activity: string;
   stage?: OfficeAnalysisStage;
+  selected?: boolean;
+  onSelect?: () => void;
 }
 
-export function AgentDesk({ agent, state, activity, stage }: AgentDeskProps) {
+export function AgentDesk({ agent, state, activity, stage, selected, onSelect }: AgentDeskProps) {
   const AgentIcon = AGENT_ICONS[agent.id];
+  const content = (
+    <>
+      <div className="agent-desk-graphic" aria-hidden="true">
+        <div className="desk-screen">
+          <AgentIcon size={14} strokeWidth={2.2} />
+          <span />
+        </div>
+        <div className="desk-surface"><span /></div>
+        <div className="agent-person">
+          <span className="agent-person__head" />
+          <span className="agent-person__body" />
+        </div>
+      </div>
+      <div className="agent-station__label">
+        <div>
+          <span>{agent.deskLabel}</span>
+          <strong>{agent.name}</strong>
+          <small>{agent.role} · {getAgentStateLabel(state)}</small>
+        </div>
+        <span className="agent-state-dot" aria-hidden="true" />
+      </div>
+      <p>{activity}</p>
+      {stage?.status === "running" ? <AnalysisStageProgress stage={stage} /> : null}
+    </>
+  );
 
   return (
     <li
@@ -38,30 +65,23 @@ export function AgentDesk({ agent, state, activity, stage }: AgentDeskProps) {
       data-rank={agent.id === "orchestrator" ? "lead" : "member"}
       data-state={state}
       data-stage-status={stage?.status}
+      data-selected={selected ? "true" : "false"}
     >
-      <article className="agent-station__content" aria-label={`${agent.name}, ${agent.role}`}>
-        <div className="agent-desk-graphic" aria-hidden="true">
-          <div className="desk-screen">
-            <AgentIcon size={14} strokeWidth={2.2} />
-            <span />
-          </div>
-          <div className="desk-surface"><span /></div>
-          <div className="agent-person">
-            <span className="agent-person__head" />
-            <span className="agent-person__body" />
-          </div>
-        </div>
-        <div className="agent-station__label">
-          <div>
-            <span>{agent.deskLabel}</span>
-            <strong>{agent.name}</strong>
-            <small>{agent.role} · {getAgentStateLabel(state)}</small>
-          </div>
-          <span className="agent-state-dot" aria-hidden="true" />
-        </div>
-        <p>{activity}</p>
-        {stage?.status === "running" ? <AnalysisStageProgress stage={stage} /> : null}
-      </article>
+      {onSelect ? (
+        <button
+          className="agent-station__content"
+          type="button"
+          aria-label={`${agent.name} 산출물 상세 보기`}
+          aria-expanded={selected}
+          onClick={onSelect}
+        >
+          {content}
+        </button>
+      ) : (
+        <article className="agent-station__content" aria-label={`${agent.name}, ${agent.role}`}>
+          {content}
+        </article>
+      )}
     </li>
   );
 }

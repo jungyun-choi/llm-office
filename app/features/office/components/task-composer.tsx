@@ -1,12 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, ArrowUp, Check, Info, ListPlus, MessageCircleQuestion, RotateCcw, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, Info, ListPlus, LoaderCircle, MessageCircleQuestion, RotateCcw, Zap } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import type { PocConnectionMode } from "../api/poc-client";
+import { requestOrbitQuestions } from "../api/job-client";
 import { OFFICE_COPY } from "../copy";
 import { officeRequestSchema } from "../office-request-schema";
 import {
@@ -34,17 +35,46 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
     answers: OrbitAnswers;
     questionIndex: number;
     phase: "questions" | "review";
+    source: "company-opencode" | "fallback";
+    model?: string;
+    notice?: string;
   } | null>(null);
   const [answer, setAnswer] = useState("");
+  const [isPreparingMeeting, setIsPreparingMeeting] = useState(false);
   const form = useForm<OfficeRequestInput>({
     resolver: zodResolver(officeRequestSchema),
     defaultValues: { request: "" },
   });
 
-  const startMeeting = form.handleSubmit((input) => {
-    const questions = createOrbitQuestions(input.request);
-    setMeeting({ request: input.request, questions, answers: {}, questionIndex: 0, phase: "questions" });
-    setAnswer("");
+  const startMeeting = form.handleSubmit(async (input) => {
+    if (isPreparingMeeting) return;
+    setIsPreparingMeeting(true);
+    const controller = new AbortController();
+    try {
+      const generated = await requestOrbitQuestions(input.request, controller.signal);
+      setMeeting({
+        request: input.request,
+        questions: generated.questions,
+        answers: {},
+        questionIndex: 0,
+        phase: "questions",
+        source: generated.source,
+        model: generated.model,
+      });
+    } catch {
+      setMeeting({
+        request: input.request,
+        questions: createOrbitQuestions(input.request),
+        answers: {},
+        questionIndex: 0,
+        phase: "questions",
+        source: "fallback",
+        notice: OFFICE_COPY.composer.meetingFallbackNotice,
+      });
+    } finally {
+      setAnswer("");
+      setIsPreparingMeeting(false);
+    }
   });
 
   const quickSubmit = form.handleSubmit(async (input) => {
@@ -111,11 +141,16 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
               {meeting.phase === "review" ? OFFICE_COPY.composer.reviewTitle : OFFICE_COPY.composer.meetingTitle}
             </strong>
             <p>{meeting.phase === "review" ? OFFICE_COPY.composer.reviewDescription : OFFICE_COPY.composer.meetingDescription}</p>
+            <span className="orbit-meeting__source" data-source={meeting.source}>
+              {meeting.source === "company-opencode" ? OFFICE_COPY.composer.meetingModelSource : OFFICE_COPY.composer.meetingFallbackSource}
+              {meeting.model ? ` · ${meeting.model}` : ""}
+            </span>
           </div>
           <button className="orbit-meeting__close" type="button" onClick={() => setMeeting(null)}>
             {OFFICE_COPY.composer.cancelMeeting}
           </button>
         </div>
+        {meeting.notice && <p className="orbit-meeting__notice" role="status">{meeting.notice}</p>}
         {meeting.phase === "questions" && question ? (
           <form className="orbit-question" onSubmit={(event) => { event.preventDefault(); answerQuestion(answer); }}>
             <div className="orbit-question__progress" aria-label={`질문 ${meeting.questionIndex + 1}/${meeting.questions.length}`}>
@@ -198,11 +233,14 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
           onKeyDown={handleComposerKeyDown}
           {...form.register("request")}
         />
-        <button type="submit" disabled={isSubmitting}>
-          <MessageCircleQuestion size={19} strokeWidth={2.2} aria-hidden="true" />
-          <span>{OFFICE_COPY.composer.submit}</span>
+        <button type="submit" disabled={isSubmitting || isPreparingMeeting}>
+          {isPreparingMeeting
+            ? <LoaderCircle className="is-spinning" size={19} strokeWidth={2.2} aria-hidden="true" />
+            : <MessageCircleQuestion size={19} strokeWidth={2.2} aria-hidden="true" />}
+          <span>{isPreparingMeeting ? "질문 준비 중" : OFFICE_COPY.composer.submit}</span>
         </button>
       </div>
+      {isPreparingMeeting && <p className="orbit-preflight-status" role="status">{OFFICE_COPY.composer.meetingPreparing}</p>}
       <button className="task-composer__quick" type="button" disabled={isSubmitting} onClick={() => void quickSubmit()}>
         <Zap size={14} aria-hidden="true" />{OFFICE_COPY.composer.quickSubmit}
         <small>질문 없이 기본 가정으로 대기열 등록</small>

@@ -1,6 +1,8 @@
 import { JobService } from "../application/job-service";
 import { JobWorker } from "../application/job-worker";
+import { OrbitQuestionService } from "../application/orbit-question-service";
 import { LocalJobController } from "../http/local-job-controller";
+import { CompanyOrbitQuestionGenerator } from "./company-orbit-question-generator";
 import { getJobRuntimeConfig } from "./job-config";
 import { LocalJobExecutor } from "./local-job-executor";
 import { SqliteJobRepository } from "./sqlite-job-repository";
@@ -16,7 +18,8 @@ export function createLocalJobSystem(): LocalJobSystem {
   const executor = new LocalJobExecutor(config);
   const service = new JobService(repository, executor, config);
   const worker = new JobWorker(repository, executor, service);
-  const controller = new LocalJobController(service);
+  const orbitQuestions = new OrbitQuestionService(new CompanyOrbitQuestionGenerator());
+  const controller = new LocalJobController(service, orbitQuestions);
   worker.start();
   return {
     controller,

@@ -39,6 +39,7 @@ export async function proxyLocalJobCapabilities(request: Request): Promise<Respo
 export async function proxyLocalJobRequest(
   request: Request,
   bridgePath: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const correlationId = safeRequestId(request.headers.get("x-correlation-id"));
   try {
@@ -56,7 +57,7 @@ export async function proxyLocalJobRequest(
       headers: createBridgeHeaders(request, bridgeToken, correlationId),
       body,
       signal: request.signal,
-    });
+    }, timeoutMs);
     const payload = await readLimitedJson(response);
     return jobJsonResponse(payload, response.status, correlationId, safeResponseHeaders(response));
   } catch (error) {

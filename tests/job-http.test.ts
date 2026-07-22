@@ -3,6 +3,7 @@ import { afterEach, describe, test } from "node:test";
 import { JobService } from "../lib/office-jobs/application/job-service";
 import { JobWorker } from "../lib/office-jobs/application/job-worker";
 import type { JobExecutionPort } from "../lib/office-jobs/application/job-execution.port";
+import { OrbitQuestionService } from "../lib/office-jobs/application/orbit-question-service";
 import type { JobRecord, JobState } from "../lib/office-jobs/domain/job-types";
 import { JobError, jobNotFound, staleJobVersion } from "../lib/office-jobs/domain/job-errors";
 import { LocalJobController } from "../lib/office-jobs/http/local-job-controller";
@@ -188,6 +189,58 @@ describe("single-server job proxy", () => {
 });
 
 describe("local job controller HTTP mapping", () => {
+  test("returns bounded Orbit questions from the injected company generator", async () => {
+    const controller = controllerWith({}, new OrbitQuestionService({
+      generate: async () => ({
+        source: "company-opencode",
+        model: "codemate/CodeLLMPro",
+        questions: [{
+          id: "behavior",
+          prompt: "현재 제한과 원하는 제한은 각각 얼마인가요?",
+          hint: "변경 범위를 확정합니다.",
+          placeholder: "예: 현재 1MB, 목표 2MB",
+        }],
+      }),
+    }));
+    const response = await controller.intakeQuestions(new Request("http://localhost/api/v1/jobs/intake/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request: "리드 버퍼를 늘려 주세요" }),
+    }));
+    const payload = await response.json() as { source: string; questions: Array<{ id: string }> };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.source, "company-opencode");
+    assert.equal(payload.questions[0]?.id, "behavior");
+  });
+
+  test("rejects probable secrets before calling the Orbit generator", async () => {
+    let called = 0;
+    const controller = controllerWith({}, new OrbitQuestionService({
+      generate: async () => {
+        called += 1;
+        return {
+          source: "company-opencode",
+          model: "codemate/CodeLLMPro",
+          questions: [{
+            id: "priority",
+            prompt: "우선순위는 무엇인가요?",
+            hint: "핵심 조건을 확인합니다.",
+            placeholder: "예: 호환성",
+          }],
+        };
+      },
+    }));
+    const response = await controller.intakeQuestions(new Request("http://localhost/api/v1/jobs/intake/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request: "api_key=1234567890abcdef" }),
+    }));
+
+    assert.equal(response.status, 400);
+    assert.equal(called, 0);
+  });
+
   test("maps missing jobs and stale approvals without leaking internals", async () => {
     const missingController = controllerWith({
       get: () => {
@@ -428,7 +481,10 @@ function enableProxy(): void {
   delete process.env.AI_OFFICE_BRIDGE_PORT;
 }
 
-function controllerWith(overrides: Record<string, unknown>): LocalJobController {
+function controllerWith(
+  overrides: Record<string, unknown>,
+  orbitQuestions?: OrbitQuestionService,
+): LocalJobController {
   const service = {
     create: async () => {
       throw new Error("not implemented");
@@ -447,7 +503,7 @@ function controllerWith(overrides: Record<string, unknown>): LocalJobController 
     },
     ...overrides,
   } as unknown as JobService;
-  return new LocalJobController(service);
+  return new LocalJobController(service, orbitQuestions);
 }
 
 function deferred<T>() {

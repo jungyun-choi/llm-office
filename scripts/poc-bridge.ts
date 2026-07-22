@@ -92,6 +92,10 @@ async function handleJobRoute(
     await handleControllerRequest(incoming, outgoing, (request) => controller.create(request));
     return;
   }
+  if (incoming.method === "POST" && requestUrl.pathname === "/api/v1/jobs/intake/questions") {
+    await handleControllerRequest(incoming, outgoing, (request) => controller.intakeQuestions(request));
+    return;
+  }
   const actionMatch = requestUrl.pathname.match(/^\/api\/v1\/jobs\/([^/]+)\/actions$/u);
   if (incoming.method === "POST" && actionMatch) {
     await handleControllerRequest(

@@ -1,4 +1,5 @@
 import type { OrbitIntakeBrief } from "./types";
+import { z } from "zod";
 
 export type OrbitQuestionId = "behavior" | "context" | "acceptance" | "priority";
 
@@ -10,6 +11,36 @@ export interface OrbitQuestion {
 }
 
 export type OrbitAnswers = Partial<Record<OrbitQuestionId, string>>;
+
+export interface OrbitQuestionSet {
+  source: "company-opencode";
+  model: string;
+  questions: readonly OrbitQuestion[];
+}
+
+const orbitQuestionSetSchema = z.object({
+  source: z.literal("company-opencode"),
+  model: z.string().trim().min(1).max(160),
+  questions: z.array(z.object({
+    id: z.enum(["behavior", "context", "acceptance", "priority"]),
+    prompt: z.string().trim().min(1).max(240),
+    hint: z.string().trim().min(1).max(280),
+    placeholder: z.string().trim().min(1).max(320),
+  }).strict()).min(1).max(3),
+}).strict().superRefine((value, context) => {
+  const ids = value.questions.map(({ id }) => id);
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({
+      code: "custom",
+      message: "질문 범주는 중복될 수 없습니다.",
+      path: ["questions"],
+    });
+  }
+});
+
+export function parseOrbitQuestionSet(payload: unknown): OrbitQuestionSet {
+  return orbitQuestionSetSchema.parse(payload);
+}
 
 const QUESTIONS: Record<OrbitQuestionId, OrbitQuestion> = {
   behavior: {

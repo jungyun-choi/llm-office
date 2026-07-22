@@ -12,8 +12,13 @@ import { getPocTruthLabel } from "./task-composer";
 import { TaskQueueHistory } from "./task-queue-history";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
-import { ClaudeOffice, getDevelopmentStationState } from "./claude-office";
-import { AnalysisOffice, getAnalysisAgentState } from "./analysis-office";
+import {
+  ClaudeOffice,
+  getDevelopmentStationState,
+  getImplementationPlanIndex,
+  shouldShowImplementationActivity,
+} from "./claude-office";
+import { AnalysisOffice, getAnalysisAgentDetail, getAnalysisAgentState } from "./analysis-office";
 import {
   CompanyOperationsBoard,
   getCompanyTeam,
@@ -24,6 +29,8 @@ import {
   calculateWorkflowElapsedSeconds,
   formatWorkflowElapsedTime,
 } from "../workflow-elapsed-time";
+import { buildPocRunResult } from "../../../../lib/poc/application/poc-result-builder";
+import { runDemoPoc } from "../../../../lib/poc/infrastructure/demo-poc-runner";
 
 const ZEN_ENGINE: OfficeEngineInfo = {
   label: "OpenCode Zen 합성 POC 런타임",
@@ -196,6 +203,21 @@ test("Claude stations map coding, testing, and Git approval states", () => {
   assert.equal(getDevelopmentStationState("publisher", changesReady), "waiting");
 });
 
+test("analysis failures never look like Claude code failures", () => {
+  const failed: OfficeJob = {
+    ...createJob("job-analysis-failed", "TopView 분석", "failed"),
+    error: { stage: "analysis", message: "탑뷰 결과 형식을 확인하지 못했습니다." },
+  };
+
+  assert.equal(shouldShowImplementationActivity(failed), false);
+  assert.equal(getImplementationPlanIndex(failed), 0);
+  const markup = renderToStaticMarkup(<ClaudeOffice job={failed} runtimeLabel="CodeLLMPro" />);
+  assert.match(markup, /업무 수령 대기/u);
+  assert.match(markup, /분석팀이 문제를 해결한 뒤/u);
+  assert.doesNotMatch(markup, /Claude 작업 현황/u);
+  assert.doesNotMatch(markup, /코드 수정 실패/u);
+});
+
 test("company board assigns simultaneous work to independent teams", () => {
   const analysis = createJob("job-analysis", "DLD와 TopView를 분석해줘", "analyzing");
   const review = createJob("job-review", "구현 패킷을 검토해줘", "awaiting_coding_approval");
@@ -214,10 +236,10 @@ test("company board assigns simultaneous work to independent teams", () => {
   assert.match(markup, /실시간 오피스/u);
   assert.match(markup, /DLD와 TopView를 분석해줘/u);
   assert.match(markup, /구현 패킷을 검토해줘/u);
-  assert.match(markup, /REVIEW FILES/u);
-  assert.match(markup, /사람 검토 대기 파일철/u);
+  assert.match(markup, /REVIEW QUEUE/u);
+  assert.match(markup, /사람 검토 대기 업무/u);
   assert.match(markup, /aria-pressed="true"/u);
-  assert.match(markup, /아래 작업실에도 열렸습니다/u);
+  assert.doesNotMatch(markup, /human-file-preview/u);
   assert.match(markup, /Read buffer 코드를 수정해줘/u);
   assert.match(markup, /data-selected="true"/u);
 });
@@ -240,9 +262,9 @@ test("human review pressure uses real queue depth and wait age without an explic
   const clear = getHumanBottleneckSnapshot([], now);
 
   assert.equal(watched.level, "watch");
-  assert.equal(watched.label, "검토 대기 파일철");
+  assert.equal(watched.label, "검토 대기 업무");
   assert.equal(aged.level, "bottleneck");
-  assert.equal(aged.label, "검토 대기 파일철");
+  assert.equal(aged.label, "검토 대기 업무");
   assert.equal(aged.oldestWaitMinutes, 40);
   assert.match(aged.detail, /최장 40분/u);
   assert.equal(clear.level, "clear");
@@ -300,6 +322,21 @@ test("company analysis progress activates only the current specialist", () => {
   assert.match(markup, /사내 LLM 응답 대기/u);
   assert.match(markup, /경과 계산 중/u);
   assert.match(markup, /2차 시도/u);
+});
+
+test("agent detail exposes the completed model artifact", () => {
+  const timestamp = "2026-07-22T00:00:00.000Z";
+  const job: OfficeJob = {
+    ...createJob("job-agent-output", "DLD 근거를 정리해줘", "awaiting_coding_approval"),
+    analysis: buildPocRunResult(runDemoPoc("버퍼 근거 조사"), timestamp, timestamp),
+    analysisStages: [{ id: "research", status: "completed", summary: "DLD 단계 완료" }],
+  };
+
+  const detail = getAnalysisAgentDetail("research", job);
+  assert.ok(detail);
+  assert.match(detail.summary ?? "", /합성 Wiki/u);
+  assert.ok(detail.findings.length > 0);
+  assert.ok(detail.evidence.some((item) => item.includes("wiki/")));
 });
 
 test("stored running work returns to the FIFO and terminal history is bounded", () => {

@@ -1,7 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildOrbitIntakeBrief, createOrbitQuestions } from "./orbit-intake";
+import {
+  buildOrbitIntakeBrief,
+  createOrbitQuestions,
+  parseOrbitQuestionSet,
+} from "./orbit-intake";
+
+test("Orbit accepts bounded company LLM questions", () => {
+  const result = parseOrbitQuestionSet({
+    source: "company-opencode",
+    model: "codemate/CodeLLMPro",
+    questions: [{
+      id: "acceptance",
+      prompt: "2MB 경계에서 반드시 보존해야 할 기존 동작은 무엇인가요?",
+      hint: "회귀 기준을 확정합니다.",
+      placeholder: "예: 기존 1MB 요청 결과는 동일해야 합니다.",
+    }],
+  });
+
+  assert.equal(result.source, "company-opencode");
+  assert.equal(result.questions[0]?.id, "acceptance");
+});
+
+test("Orbit rejects duplicate LLM question categories", () => {
+  assert.throws(() => parseOrbitQuestionSet({
+    source: "company-opencode",
+    model: "codemate/CodeLLMPro",
+    questions: [
+      {
+        id: "context",
+        prompt: "관련 경로는 어디인가요?",
+        hint: "범위를 좁힙니다.",
+        placeholder: "예: FTL/read",
+      },
+      {
+        id: "context",
+        prompt: "관련 문서는 무엇인가요?",
+        hint: "근거를 찾습니다.",
+        placeholder: "예: .LLM DLD",
+      },
+    ],
+  }));
+});
 
 test("Orbit asks only missing high-impact questions", () => {
   const vague = createOrbitQuestions("리드 버퍼를 더 크게 만들어 주세요");

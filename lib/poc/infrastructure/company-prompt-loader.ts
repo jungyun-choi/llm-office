@@ -16,8 +16,16 @@ const PROMPT_FILES: Record<SequentialAnalysisRole, string> = {
 };
 
 export async function loadCompanyPrompt(role: SequentialAnalysisRole): Promise<string> {
+  return loadTrustedCompanyPrompt(PROMPT_FILES[role]);
+}
+
+export async function loadCompanyOrbitPrompt(): Promise<string> {
+  return loadTrustedCompanyPrompt("orbit.md");
+}
+
+async function loadTrustedCompanyPrompt(filename: string): Promise<string> {
   const { open } = await import("node:fs/promises");
-  const promptPath = path.join(PROMPT_ROOT, PROMPT_FILES[role]);
+  const promptPath = path.join(PROMPT_ROOT, filename);
   let file: Awaited<ReturnType<typeof open>> | undefined;
   try {
     file = await open(promptPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);

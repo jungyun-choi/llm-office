@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowRight, BrainCircuit, Code2, Files, UserRoundCheck } from "lucide-react";
-import type { CSSProperties } from "react";
+import { ArrowRight, BrainCircuit, ClipboardList, Code2, UserRoundCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { OFFICE_AGENTS } from "../office-data";
@@ -86,7 +85,7 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
                   <em>{team.id === "review" ? `${humanBottleneck.waitingCount}건 대기` : `${jobs.length}건`}</em>
                 </header>
                 {team.id === "review" ? (
-                  <HumanReviewFileStack
+                  <HumanReviewQueue
                     jobs={jobs.filter((job) => HUMAN_WAITING_STATES.includes(job.state as (typeof HUMAN_WAITING_STATES)[number]))}
                     snapshot={humanBottleneck}
                     selectedJobId={props.selectedJobId}
@@ -126,74 +125,42 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
   );
 }
 
-function HumanReviewFileStack(props: {
+function HumanReviewQueue(props: {
   jobs: readonly OfficeJob[];
   snapshot: HumanBottleneckSnapshot;
   selectedJobId?: string;
   onSelect: (jobId: string) => void;
   now?: number;
 }) {
-  const visibleJobs = props.jobs.slice(0, 4);
-  const selectedFile = visibleJobs.find((job) => job.id === props.selectedJobId);
   return (
-    <div className="human-bottleneck" data-level={props.snapshot.level}>
-      <div className="human-bottleneck__summary">
-        <span className="human-bottleneck__symbol"><Files size={17} aria-hidden="true" /></span>
+    <div className="human-review-queue" data-level={props.snapshot.level}>
+      <div className="human-review-queue__summary">
+        <span><ClipboardList size={16} aria-hidden="true" /></span>
         <div>
-          <small>REVIEW FILES</small>
+          <small>REVIEW QUEUE</small>
           <strong>{props.snapshot.label}</strong>
           <p>{props.snapshot.detail}</p>
         </div>
       </div>
-      <div className="human-review-room">
-        <div className="human-review-room__window" aria-hidden="true"><span /><span /></div>
-        <div className="human-review-room__person" aria-hidden="true"><span /><i /></div>
-        <div className="human-review-room__desk" aria-hidden="true"><span /></div>
-        {visibleJobs.length > 0 ? (
-          <>
-            <ol className="human-file-stack" aria-label="사람 검토 대기 파일철">
-              {visibleJobs.map((job, index) => (
-                <li
-                  key={job.id}
-                  data-selected={job.id === props.selectedJobId ? "true" : "false"}
-                  style={{ "--file-index": index } as CSSProperties}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={job.id === props.selectedJobId}
-                    onClick={() => props.onSelect(job.id)}
-                  >
-                    <span className="human-file-stack__tab">{getHumanGateLabel(job.state)}</span>
-                    <strong>{job.prompt}</strong>
-                    <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
-                  </button>
-                </li>
-              ))}
-              {props.jobs.length > visibleJobs.length && (
-                <li className="human-file-stack__overflow">+{props.jobs.length - visibleJobs.length}개</li>
-              )}
-            </ol>
-            <div className="human-file-preview" data-open={selectedFile ? "true" : "false"} aria-live="polite">
-              {selectedFile ? (
-                <>
-                  <span>{getHumanGateLabel(selectedFile.state)}</span>
-                  <strong>{selectedFile.prompt}</strong>
-                  <p>{getTeamActivity(selectedFile)}</p>
-                  <small>{formatHumanWait(selectedFile, props.now)} · 아래 작업실에도 열렸습니다.</small>
-                </>
-              ) : (
-                <>
-                  <span>FILE PREVIEW</span>
-                  <strong>서류를 선택하세요</strong>
-                  <p>책상 위 파일을 누르면 상세 내용이 펼쳐집니다.</p>
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="company-team-lane__empty">책상 위가 비어 있습니다</p>
-        )}
-      </div>
+      {props.jobs.length > 0 ? (
+        <ol className="human-review-queue__list" aria-label="사람 검토 대기 업무">
+          {props.jobs.map((job) => (
+            <li key={job.id} data-selected={job.id === props.selectedJobId ? "true" : "false"}>
+              <button
+                type="button"
+                aria-pressed={job.id === props.selectedJobId}
+                onClick={() => props.onSelect(job.id)}
+              >
+                <span>{getHumanGateLabel(job.state)}</span>
+                <strong>{job.prompt}</strong>
+                <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="human-review-queue__empty">검토를 기다리는 업무가 없습니다.</p>
+      )}
     </div>
   );
 }
@@ -248,14 +215,14 @@ export function getHumanBottleneckSnapshot(
       level: "bottleneck",
       waitingCount: waiting.length,
       oldestWaitMinutes,
-      label: "검토 대기 파일철",
+      label: "검토 대기 업무",
       detail: `${waiting.length}건 · ${waitLabel}`,
     }
     : {
       level: "watch",
       waitingCount: waiting.length,
       oldestWaitMinutes,
-      label: "검토 대기 파일철",
+      label: "검토 대기 업무",
       detail: `${waiting.length}건 · ${waitLabel}`,
     };
 }

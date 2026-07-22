@@ -1,7 +1,17 @@
-import { BrainCircuit } from "lucide-react";
+"use client";
 
+import { BrainCircuit, FileSearch, X } from "lucide-react";
+import { useState } from "react";
+
+import { getJobAnalysisResult } from "../job-analysis";
 import { OFFICE_AGENTS } from "../office-data";
-import type { AgentFlowState, AgentId, OfficeAnalysisStage, OfficeJob } from "../types";
+import type {
+  AgentFlowState,
+  AgentId,
+  OfficeAgent,
+  OfficeAnalysisStage,
+  OfficeJob,
+} from "../types";
 import { AgentDesk } from "./agent-desk";
 
 const ANALYSIS_STAGE_TOTAL = 6;
@@ -12,6 +22,8 @@ interface AnalysisOfficeProps {
 }
 
 export function AnalysisOffice({ job, runtimeLabel }: AnalysisOfficeProps) {
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentId | null>(null);
+  const detail = selectedAgentId ? getAnalysisAgentDetail(selectedAgentId, job) : null;
   return (
     <section className="campus-office campus-office--analysis" aria-labelledby="analysis-office-title">
       <header className="campus-office__header">
@@ -34,12 +46,102 @@ export function AnalysisOffice({ job, runtimeLabel }: AnalysisOfficeProps) {
               state={state}
               stage={stage}
               activity={getAnalysisActivity(agent.id, agent.specialty, job, state)}
+              selected={selectedAgentId === agent.id}
+              onSelect={() => setSelectedAgentId((current) => current === agent.id ? null : agent.id)}
             />
           );
         })}
       </ul>
+      {detail && (
+        <aside className="agent-detail-panel" aria-labelledby="agent-detail-title" aria-live="polite">
+          <header>
+            <span><FileSearch size={17} aria-hidden="true" /></span>
+            <div>
+              <small>{detail.agent.deskLabel} · AGENT OUTPUT</small>
+              <h3 id="agent-detail-title">{detail.agent.name} 산출물</h3>
+              <p>{detail.agent.role} · {detail.statusLabel}</p>
+            </div>
+            <button type="button" onClick={() => setSelectedAgentId(null)} aria-label="에이전트 상세 닫기">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </header>
+          {detail.summary ? (
+            <section className="agent-detail-panel__output">
+              <div>
+                <small>SUMMARY</small>
+                <p>{detail.summary}</p>
+              </div>
+              <ArtifactList label="FINDINGS" items={detail.findings} empty="정리된 발견 사항이 없습니다." />
+              <ArtifactList label="EVIDENCE" items={detail.evidence} empty="연결된 근거가 없습니다." code />
+            </section>
+          ) : (
+            <p className="agent-detail-panel__empty">
+              {detail.stage?.status === "running"
+                ? "지금 이 에이전트가 작업 중입니다. 완료되는 즉시 실제 산출물이 여기에 표시됩니다."
+                : "아직 완료된 산출물이 없습니다. 해당 단계가 끝나면 요약과 발견 사항, 근거가 표시됩니다."}
+            </p>
+          )}
+        </aside>
+      )}
     </section>
   );
+}
+
+interface AnalysisAgentDetail {
+  agent: OfficeAgent;
+  stage?: OfficeAnalysisStage;
+  statusLabel: string;
+  summary?: string;
+  findings: readonly string[];
+  evidence: readonly string[];
+}
+
+export function getAnalysisAgentDetail(
+  agentId: AgentId,
+  job: OfficeJob | null,
+): AnalysisAgentDetail | null {
+  const agent = OFFICE_AGENTS.find((candidate) => candidate.id === agentId);
+  if (!agent) return null;
+  const stage = job ? getStage(agentId, job) : undefined;
+  const result = job ? getJobAnalysisResult(job) : null;
+  const roleOutput = agentId === "orchestrator"
+    ? undefined
+    : result?.roleOutputs.find((output) => output.role === agentId);
+  return {
+    agent,
+    stage,
+    statusLabel: getDetailStatusLabel(stage, job),
+    summary: roleOutput?.summary ?? stage?.summary ?? (agentId === "orchestrator" ? result?.summary : undefined),
+    findings: roleOutput?.findings ?? [],
+    evidence: roleOutput?.evidence ?? [],
+  };
+}
+
+function ArtifactList(props: {
+  label: string;
+  items: readonly string[];
+  empty: string;
+  code?: boolean;
+}) {
+  return (
+    <div>
+      <small>{props.label}</small>
+      {props.items.length > 0 ? (
+        <ul>{props.items.map((item, index) => (
+          <li key={`${props.label}-${index}`}>{props.code ? <code>{item}</code> : item}</li>
+        ))}</ul>
+      ) : <p className="is-empty">{props.empty}</p>}
+    </div>
+  );
+}
+
+function getDetailStatusLabel(stage: OfficeAnalysisStage | undefined, job: OfficeJob | null): string {
+  if (!job) return "업무 대기";
+  if (stage?.status === "running") return "작업 중";
+  if (stage?.status === "completed") return "산출물 완료";
+  if (stage?.status === "failed") return "문제 발생";
+  if (stage?.status === "pending") return "선행 작업 대기";
+  return job.state === "queued" ? "업무 대기열" : "산출물 대기";
 }
 
 function OfficeStateBadge({ state }: { state: string }) {

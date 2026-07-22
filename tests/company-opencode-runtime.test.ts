@@ -28,6 +28,7 @@ import {
   OpenCodeCliRuntime,
 } from "../lib/poc/infrastructure/opencode-poc-runner";
 import { hasTrustedCompanyAuth } from "../lib/poc/infrastructure/company-turn-executor";
+import { CompanyOrbitQuestionGenerator } from "../lib/office-jobs/infrastructure/company-orbit-question-generator";
 
 const COMPANY_ENVIRONMENT_NAMES = [
   "NODE_ENV",
@@ -167,6 +168,28 @@ test("company auth rejects unsafe files and materializes only codemate", async (
     await symlink(trustedTarget, authFile);
     config = getOpenCodeRuntimeConfig();
     assert.equal(await hasTrustedCompanyAuth(config), false);
+  } finally {
+    restoreEnvironment(previous);
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("company Orbit generates request-specific questions through the isolated OpenCode turn", async () => {
+  const previous = captureEnvironment(COMPANY_ENVIRONMENT_NAMES);
+  const trustedTestRoot = await realpath(os.homedir());
+  const temporaryRoot = await mkdtemp(path.join(trustedTestRoot, ".company-orbit-test-"));
+  try {
+    const executable = path.join(temporaryRoot, "bin", "opencode");
+    const authFile = path.join(temporaryRoot, "service-auth.json");
+    await writeCompanyAuth(authFile, "company-secret-value");
+    await writeFakeOrbitOpenCode(executable);
+    configureCompanyEnvironment(authFile, executable);
+
+    const result = await new CompanyOrbitQuestionGenerator().generate("Read buffer를 2MB로 늘려 주세요");
+
+    assert.equal(result.source, "company-opencode");
+    assert.equal(result.model, ROLE_MODELS.orchestrator);
+    assert.deepEqual(result.questions.map(({ id }) => id), ["behavior", "acceptance"]);
   } finally {
     restoreEnvironment(previous);
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -372,6 +395,39 @@ async function writeFakeOpenCode(
     'if (behavior === `leak-stdout:${role}`) { process.stdout.write(process.env.INTERNAL_API_KEY); process.exit(0); }',
     'if (behavior === `leak-stderr:${role}`) { process.stderr.write(process.env.INTERNAL_API_KEY); process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: JSON.stringify(outputs[role]) } })); process.exit(0); }',
     'process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: JSON.stringify(outputs[role]) } }));',
+  ].join("\n");
+  await mkdir(path.dirname(executable), { recursive: true, mode: 0o700 });
+  await writeFile(executable, source, { mode: 0o700 });
+  await chmod(executable, 0o700);
+}
+
+async function writeFakeOrbitOpenCode(executable: string): Promise<void> {
+  const output = {
+    questions: [
+      {
+        id: "behavior",
+        prompt: "현재 제한과 목표 제한은 각각 얼마인가요?",
+        hint: "동작 차이를 확정합니다.",
+        placeholder: "예: 현재 1MB, 목표 2MB",
+      },
+      {
+        id: "acceptance",
+        prompt: "기존 동작 중 반드시 보존할 회귀 기준은 무엇인가요?",
+        hint: "완료 기준을 확정합니다.",
+        placeholder: "예: 기존 1MB 결과 유지",
+      },
+    ],
+  };
+  const source = [
+    `#!${process.execPath}`,
+    'const fs = require("node:fs");',
+    "const args = process.argv.slice(2);",
+    'if (args.length === 1 && args[0] === "--version") { process.stdout.write("1.4.3\\n"); process.exit(0); }',
+    'const contextPath = args[args.indexOf("--file") + 1];',
+    'const context = fs.readFileSync(contextPath, "utf8");',
+    'if (!context.includes("Read buffer") || !context.includes("UNTRUSTED_DATA_JSON=")) process.exit(8);',
+    `const output = ${JSON.stringify(output)};`,
+    'process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: JSON.stringify(output) } }));',
   ].join("\n");
   await mkdir(path.dirname(executable), { recursive: true, mode: 0o700 });
   await writeFile(executable, source, { mode: 0o700 });

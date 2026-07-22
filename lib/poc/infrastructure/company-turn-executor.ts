@@ -26,6 +26,7 @@ const MIN_SNAPSHOT_BYTES = 64 * 1_024;
 const MAX_SNAPSHOT_BYTES = 16 * 1_024 * 1_024;
 const CONTEXT_OVERHEAD_BYTES = 512 * 1_024;
 const UNTRUSTED_CONTEXT_MARKER = "\n\nUNTRUSTED_DATA_JSON=";
+const MIN_COMPANY_TURN_TIMEOUT_MS = 30_000;
 
 export const COMPANY_DISABLED_TOOLS = {
   bash: false,
@@ -52,25 +53,35 @@ interface TrustedCompanyAuth {
   key: string;
 }
 
+export type CompanyTurnRole = SequentialTurnRequest["role"] | "orbit";
+
+export interface CompanyTurnRequest extends Omit<SequentialTurnRequest, "role"> {
+  role: CompanyTurnRole;
+  timeoutMs?: number;
+}
+
 export class CompanyTurnExecutor implements SequentialTurnExecutor {
   constructor(
     private readonly executable: string,
     private readonly config: OpenCodeRuntimeConfig,
   ) {}
 
-  async execute(request: SequentialTurnRequest): Promise<SequentialTurnResult> {
+  async execute(request: CompanyTurnRequest): Promise<SequentialTurnResult> {
     if (this.config.profile !== "company") throw new PocRunnerError("unavailable");
     const runtime = await createCompanyRuntimeDirectory();
     try {
       const apiKey = await stageCompanyAuth(this.config, runtime);
       const prompt = await stageTurnContext(request.prompt, runtime);
-      const model = companyModelForRole(this.config, request.role);
+      const model = companyModelForRole(
+        this.config,
+        request.role === "orbit" ? "orchestrator" : request.role,
+      );
       const result = await executeSecureCli({
         executable: this.executable,
         args: companyProcessArguments(request.role, prompt.positional, prompt.contextPath, model, runtime),
         cwd: runtime.workspace,
         env: companyEnvironment(this.executable, runtime, this.config, model, apiKey),
-        timeoutMs: COMPANY_TURN_TIMEOUT_MS,
+        timeoutMs: companyTurnTimeout(request.timeoutMs),
         stdoutLimitBytes: this.config.stdoutLimitBytes,
         stderrLimitBytes: this.config.stderrLimitBytes,
         signal: request.signal,
@@ -220,7 +231,7 @@ function companyContextLimitBytes(): number {
 }
 
 function companyProcessArguments(
-  role: SequentialTurnRequest["role"],
+  role: CompanyTurnRole,
   positionalPrompt: string,
   contextPath: string,
   model: string,
@@ -240,6 +251,14 @@ function companyProcessArguments(
     "--file",
     contextPath,
   ];
+}
+
+function companyTurnTimeout(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) return COMPANY_TURN_TIMEOUT_MS;
+  return Math.min(
+    COMPANY_TURN_TIMEOUT_MS,
+    Math.max(MIN_COMPANY_TURN_TIMEOUT_MS, Math.round(requested)),
+  );
 }
 
 function companyEnvironment(

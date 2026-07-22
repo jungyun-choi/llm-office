@@ -123,8 +123,12 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
   );
 }
 
-function shouldShowImplementationActivity(job: OfficeJob | null): boolean {
-  return Boolean(job && !["queued", "analyzing", "canceled"].includes(job.state));
+export function shouldShowImplementationActivity(job: OfficeJob | null): boolean {
+  return Boolean(
+    job &&
+    !["queued", "analyzing", "canceled"].includes(job.state) &&
+    !isPreDevelopmentFailure(job),
+  );
 }
 
 function getClaudeCurrentTask(job: OfficeJob): string {
@@ -153,15 +157,17 @@ function getImplementationPlanState(job: OfficeJob, index: number): Implementati
   return "active";
 }
 
-function getImplementationPlanIndex(job: OfficeJob): number {
+export function getImplementationPlanIndex(job: OfficeJob): number {
   if (["awaiting_coding_approval", "coding_queued"].includes(job.state)) return 0;
   if (job.state === "coding") return 1;
   if (job.state === "testing") return 2;
   if (["changes_ready", "publishing", "review_pending", "merging"].includes(job.state)) return 3;
   if (job.state === "failed") {
+    if (job.error?.stage === "analysis" || job.error?.stage === "queue") return 0;
+    if (job.error?.stage === "coding") return 1;
     if (job.error?.stage === "testing") return 2;
     if (job.error?.stage === "publishing") return 3;
-    return 1;
+    return job.coding ? 1 : 0;
   }
   return 3;
 }
@@ -218,6 +224,7 @@ function getFailedStationState(station: DevelopmentStationId, job: OfficeJob): D
 
 function getClaudeOfficeState(job: OfficeJob | null): string {
   if (!job || ["queued", "analyzing"].includes(job.state)) return "업무 수령 대기";
+  if (isPreDevelopmentFailure(job)) return "업무 수령 대기";
   if (job.state === "awaiting_coding_approval") return "사용자 승인 대기";
   if (job.state === "changes_ready") return "Git 승인 대기";
   if (job.state === "review_pending") return "PR 최종 검토 대기";
@@ -229,12 +236,18 @@ function getClaudeOfficeState(job: OfficeJob | null): string {
 
 function getClaudeActivity(job: OfficeJob | null): string {
   if (!job) return "검토 데스크의 구현 승인을 기다립니다";
+  if (isPreDevelopmentFailure(job)) return "분석팀이 문제를 해결한 뒤 구현 패킷을 전달합니다";
   if (job.state === "awaiting_coding_approval") return "구현 패킷은 도착했지만 아직 코드를 건드리지 않습니다";
   if (job.state === "changes_ready") return "변경과 테스트를 마치고 Git 승인을 기다립니다";
   if (job.state === "review_pending") return "PR이 준비되어 사용자의 최종 코드 검토를 기다립니다";
   if (job.state === "merging") return "사용자의 최종 승인에 따라 PR을 머지하고 있습니다";
   if (job.state === "failed") return job.error?.message ?? "개발 단계에서 작업이 멈췄습니다";
   return job.coding?.summary ?? "허용된 작업 공간에서 구현을 진행합니다";
+}
+
+function isPreDevelopmentFailure(job: OfficeJob): boolean {
+  return job.state === "failed" &&
+    (job.error?.stage === "analysis" || job.error?.stage === "queue" || !job.coding);
 }
 
 function hasCodingArtifacts(job: OfficeJob): boolean {

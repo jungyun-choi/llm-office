@@ -7,10 +7,15 @@ import {
   parseIdempotencyKey,
 } from "../domain/job-schema";
 import type { JobService } from "../application/job-service";
+import type { OrbitQuestionService } from "../application/orbit-question-service";
+import { orbitQuestionRequestSchema } from "../domain/orbit-question-schema";
 import { jobErrorResponse, jobJsonResponse, parseJsonBody } from "./job-http";
 
 export class LocalJobController {
-  constructor(private readonly service: JobService) {}
+  constructor(
+    private readonly service: JobService,
+    private readonly orbitQuestions?: OrbitQuestionService,
+  ) {}
 
   async create(request: Request): Promise<Response> {
     const correlationId = parseCorrelationId(request.headers.get("x-correlation-id"));
@@ -70,6 +75,25 @@ export class LocalJobController {
     const correlationId = parseCorrelationId(request.headers.get("x-correlation-id"));
     try {
       return jobJsonResponse(await this.service.capabilities(), 200, correlationId);
+    } catch (error) {
+      return jobErrorResponse(error, correlationId);
+    }
+  }
+
+  async intakeQuestions(request: Request): Promise<Response> {
+    const correlationId = parseCorrelationId(request.headers.get("x-correlation-id"));
+    try {
+      if (!this.orbitQuestions) {
+        throw new JobError(
+          "ORBIT_MODEL_UNAVAILABLE",
+          "사내 OpenCode 오비트를 사용할 수 없습니다.",
+          503,
+          true,
+        );
+      }
+      const input = await parseJsonBody(request, orbitQuestionRequestSchema);
+      const result = await this.orbitQuestions.generate(input.request, request.signal);
+      return jobJsonResponse(result, 200, correlationId);
     } catch (error) {
       return jobErrorResponse(error, correlationId);
     }

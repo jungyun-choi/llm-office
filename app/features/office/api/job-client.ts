@@ -1,5 +1,6 @@
 import { createRequestId } from "./poc-client";
 import { parseCapabilities, parseJobPayload, parseJobsPayload } from "./job-contract";
+import { parseOrbitQuestionSet, type OrbitQuestionSet } from "../orbit-intake";
 import type {
   OfficeCapabilities,
   OfficeJob,
@@ -11,6 +12,7 @@ import type {
 const JOBS_API_BASE = "/api/v1/jobs";
 const REQUEST_TIMEOUT_MS = 12_000;
 const ACTION_REQUEST_TIMEOUT_MS = 45_000;
+const ORBIT_REQUEST_TIMEOUT_MS = 105_000;
 
 export async function listOfficeJobs(signal: AbortSignal): Promise<{
   jobs: readonly OfficeJob[];
@@ -45,6 +47,18 @@ export async function createOfficeJob(input: OfficeRequestInput, signal: AbortSi
     }),
   }, signal);
   return parseJobPayload(payload);
+}
+
+export async function requestOrbitQuestions(
+  request: string,
+  signal: AbortSignal,
+): Promise<OrbitQuestionSet> {
+  const payload = await requestJson(`${JOBS_API_BASE}/intake/questions`, {
+    method: "POST",
+    headers: new Headers({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ request }),
+  }, signal, ORBIT_REQUEST_TIMEOUT_MS);
+  return parseOrbitQuestionSet(payload);
 }
 
 export async function runOfficeJobAction(

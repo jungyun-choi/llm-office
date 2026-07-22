@@ -19,6 +19,12 @@ extension을 열어 주지 않으며 실제 회사 요청, 코드, 문서 또는
 계속된다. 개발 worker lane은 승인된 다른 업무를 동시에 처리할 수 있다. 같은 idempotency
 key 재전송은 새 업무를 만들지 않는다.
 
+분석 시작 전 오비트 미팅의 `POST /api/v1/jobs/intake/questions`는 company profile에서만
+별도의 짧은 OpenCode 턴을 실행해 요청에 맞는 질문 1~3개를 반환한다. 분석 FIFO에 Job을 넣는
+엔드포인트가 아니며 결과도 Job 산출물로 저장하지 않는다. 모델 오류·비활성 상태에서는 브라우저가
+정적 질문으로 명시적으로 fallback한다. 이 턴도 company 인증 staging, 격리 runtime, tools false,
+출력 schema와 secret 검사를 그대로 통과해야 한다.
+
 각 업무는 아래 여섯 모델 턴을 정확히 한 번씩 순차 실행한다.
 
 | 순서 | 역할 | 입력 | 출력 검증 |
@@ -44,7 +50,9 @@ preparing_context → calling_model → validating_output
 
 Job worker는 `analysisStages` snapshot과 `startedAt`, `updatedAt`, `completedAt`, 안전한 요약을
 SQLite에 저장한다. UI는 기존 `GET /api/v1/jobs` polling으로 현재 에이전트, `n/6`, 경과
-시간과 실패 단계를 보여 준다. 모델 chain-of-thought나 추정 완료율은 노출하지 않는다.
+시간과 실패 단계를 보여 준다. 완료된 좌석의 상세패널은 최종 Job 결과에 저장된 해당 역할의
+`summary`, `findings`, `evidence`를 표시하며, 진행 중에는 단계의 안전한 `summary`만 보여 준다.
+모델 chain-of-thought나 추정 완료율은 노출하지 않는다.
 
 ## CompanyTurnExecutor 보안 계약
 

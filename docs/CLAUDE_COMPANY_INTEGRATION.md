@@ -8,6 +8,7 @@
 UI와 업무 상태 머신은 다시 만들 필요가 없다.
 
 - `POST/GET /api/v1/jobs` 기반 SQLite 영속 FIFO와 히스토리
+- `POST /api/v1/jobs/intake/questions` 기반 오비트의 요청별 사전 질문과 정적 fallback
 - Human Gate 0에서 확정한 `intakeBrief`의 SQLite 저장·분석 입력·coding packet 전달
 - OpenCode 분석실 → 사람 승인 → Claude 개발실 → 서버 테스트 → 사람 승인 → Git
 - 분석 패킷 digest와 변경 digest에 묶인 optimistic version 승인
@@ -90,6 +91,12 @@ CLI에서 실제로 성립하는지 검증한다.
 - 긴 호출은 `preparing_context → calling_model → validating_output` phase와 시작 시각만
   progress callback으로 기록한다. chain-of-thought나 가짜 퍼센트는 노출하지 않는다.
 - 기존 `PocModelOutput` schema와 role id는 유지한다.
+
+오비트의 사전 미팅도 company profile에서는 같은 사내 OpenCode 실행기를 사용한다. 고정된
+`poc/company-prompts/orbit.md`와 사용자 요청을 분리해 전달하고 1~3개의 짧은 맞춤 질문만
+반환한다. 모델 통신 외의 도구 권한은 분석 턴과 똑같이 차단한다. 사내 모델이 비활성화됐거나 응답 검증에
+실패하면 UI는 그 사실을 알리고 내장 정적 질문으로 전환하며, 정적 질문을 모델 결과처럼 표시하지
+않는다.
 
 ### C. Claude coding runtime
 
@@ -228,6 +235,8 @@ Git 원격/branch 정책을 보고해. 확인되지 않은 값은 TODO로 남기
 - 사람의 리뷰 피드백이 같은 PR 브랜치의 Claude 후속 작업에 전달된다.
 - 최종 머지 승인 전에는 PR merge와 Push 작업의 Git 이슈 등록이 실행되지 않는다.
 - 실패 단계·안전한 오류·재시도 여부가 좌석과 히스토리에 보인다.
+- 분석 에이전트 좌석을 누르면 해당 역할의 실제 `summary`, `findings`, `evidence` 산출물이 보인다.
+- 사람 검토 대기 업무는 실시간 오피스에서 겹치지 않는 스크롤 목록으로 확인할 수 있다.
 - 앱 로그와 API에 token, credential, 절대 worktree 경로, stack trace가 노출되지 않는다.
 - SSO/MFA, project 권한, 보존·백업·감사 정책이 운영 전에 적용된다.
 
