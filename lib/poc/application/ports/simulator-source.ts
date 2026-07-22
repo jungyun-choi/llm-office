@@ -8,7 +8,12 @@ export interface SimulatorSourceContext {
   snapshotDigest: string;
 }
 
+export interface SimulatorSourceRequest {
+  featureRequest: string;
+  signal?: AbortSignal;
+}
+
 export interface SimulatorSource {
   readonly id: string;
-  resolve(): Promise<SimulatorSourceContext>;
+  resolve(request?: SimulatorSourceRequest): Promise<SimulatorSourceContext>;
 }

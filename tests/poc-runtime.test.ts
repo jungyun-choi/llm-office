@@ -34,6 +34,7 @@ import { pocSingleFlight } from "../lib/poc/infrastructure/single-flight";
 import { stageSyntheticRuntimeWorkspace } from "../lib/poc/infrastructure/synthetic-runtime-workspace";
 import { assertSyntheticSourceBoundary } from "../lib/poc/infrastructure/synthetic-source-boundary";
 import { SyntheticSimulatorSource } from "../lib/poc/infrastructure/synthetic-simulator-source";
+import { executeSecureCli } from "../lib/poc/infrastructure/secure-cli-process";
 import { parsePocRequest } from "../lib/poc/http/poc-http";
 import {
   isLocalPocProxyEnabled,
@@ -763,6 +764,9 @@ test("bridge source enforces loopback, rejects browser origins, and requires tok
   assert.match(source, /request\.pause\(\)/);
   assert.match(source, /status: oversized \? 413 : 400/);
   assert.doesNotMatch(source, /request\.destroy\(\)/);
+  assert.match(source, /await jobSystem\?\.close\(\)/);
+  assert.match(source, /process\.exitCode = 0/);
+  assert.doesNotMatch(source, /process\.exit\(0\)/);
 });
 
 test("secure CLI source aborts early and terminates the process group", async () => {
@@ -775,6 +779,73 @@ test("secure CLI source aborts early and terminates the process group", async ()
   assert.match(source, /process\.kill\(-child\.pid, signal\)/);
   assert.match(source, /removeEventListener\("abort", onAbort\)/);
   assert.match(source, /clearTimeout\(killTimer\)/);
+});
+
+test("secure CLI abort waits for a SIGTERM-resistant process to be killed", {
+  skip: process.platform === "win32",
+}, async () => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ai-office-stubborn-cli-"));
+  const executable = path.join(temporaryRoot, "stubborn-cli");
+  const pidFile = path.join(temporaryRoot, "pid");
+  try {
+    await writeFile(executable, [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs");',
+      `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+      'process.on("SIGTERM", () => undefined);',
+      "setInterval(() => undefined, 1000);",
+    ].join("\n"), { mode: 0o700 });
+    await chmod(executable, 0o700);
+    const controller = new AbortController();
+    const execution = executeSecureCli({
+      executable,
+      args: [],
+      cwd: temporaryRoot,
+      env: { PATH: process.env.PATH, HOME: temporaryRoot },
+      timeoutMs: 10_000,
+      stdoutLimitBytes: 8_192,
+      stderrLimitBytes: 8_192,
+      signal: controller.signal,
+    });
+    let childPid = 0;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        childPid = Number(await readFile(pidFile, "utf8"));
+        if (Number.isSafeInteger(childPid) && childPid > 1) break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    assert.ok(childPid > 1, "stubborn child did not start");
+    controller.abort();
+    const result = await execution;
+    assert.equal(result.aborted, true);
+    assert.throws(
+      () => process.kill(childPid, 0),
+      (error) => isNodeError(error) && error.code === "ESRCH",
+    );
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("secure CLI cannot miss an abort while loading the process module", async () => {
+  const controller = new AbortController();
+  const execution = executeSecureCli({
+    executable: process.execPath,
+    args: ["-e", "setInterval(() => undefined, 1000)"],
+    cwd: process.cwd(),
+    env: { PATH: process.env.PATH, HOME: os.tmpdir() },
+    timeoutMs: 10_000,
+    stdoutLimitBytes: 8_192,
+    stderrLimitBytes: 8_192,
+    signal: controller.signal,
+  });
+  controller.abort();
+  await assert.rejects(
+    execution,
+    (error) => error instanceof PocRunnerError && error.reason === "aborted",
+  );
 });
 
 function jsonRequest(body: string): Request {
@@ -816,6 +887,10 @@ function delayedAbortableResponse(
 function restoreEnvironment(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function captureEnvironment<const T extends readonly string[]>(

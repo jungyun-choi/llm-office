@@ -171,7 +171,7 @@ export class JobService {
 
   async capabilities(): Promise<JobCapabilities> {
     const [analysis, claudeAvailable] = await Promise.all([
-      localCapabilities(),
+      localCapabilities(undefined, { allowCompanyExtensions: true }),
       this.executor.isClaudeAvailable(),
     ]);
     const stats = this.repository.stats();
@@ -206,9 +206,9 @@ export class JobService {
       },
       dataPolicy: {
         profile: this.config.profile,
-        syntheticOnly: this.config.profile === "synthetic",
-        acceptsCompanyData: this.config.profile === "internal" &&
-          this.config.internalExecutionAcknowledged,
+        syntheticOnly: analysis.dataPolicy.syntheticRepositoryOnly &&
+          this.config.profile === "synthetic",
+        acceptsCompanyData: analysis.dataPolicy.acceptsCompanyData,
         rawBrowserPromptSentToClaude: this.config.profile === "internal" &&
           this.config.internalExecutionAcknowledged,
       },

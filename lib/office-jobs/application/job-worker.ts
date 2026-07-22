@@ -3,6 +3,7 @@ import type { JobRecord, JobRepository, JobState } from "../domain/job-types";
 import { JobService, toErrorSnapshot } from "./job-service";
 import { JobError } from "../domain/job-errors";
 import type { AgentRuntimeProgress } from "../../poc/application/ports/agent-runtime";
+import { isSafeCompanyOutputText } from "../../poc/infrastructure/company-output-boundary";
 
 export class JobWorker {
   private running = false;
@@ -360,7 +361,7 @@ function validAttempt(value: number | undefined): number | undefined {
 }
 
 function safeSummary(value: string | undefined): string | undefined {
-  if (!value) return undefined;
+  if (!value || !isSafeCompanyOutputText(value)) return undefined;
   return value.replace(/[\u0000-\u001F\u007F]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 500) || undefined;
 }
 

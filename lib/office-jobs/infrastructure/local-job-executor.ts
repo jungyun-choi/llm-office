@@ -40,7 +40,7 @@ const GIT_HARDENING_ARGS = [
 let claudeAvailabilityCache: { checkedAt: number; executable?: string } | undefined;
 
 export class LocalJobExecutor implements JobExecutionPort {
-  private readonly analysisService = new PocRunService();
+  private readonly analysisService = new PocRunService({ allowCompanyExtensions: true });
 
   constructor(private readonly config: JobRuntimeConfig) {}
 

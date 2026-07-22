@@ -11,7 +11,7 @@ project_context:
     dld: "<path-or-glob-to-DLD>"
     topview: "<path-or-glob-to-TopView>"
 
-# OpenCode가 실제로 인식하는 모델 ID로 바꾼다. UI는 이 목록의 id만 선택한다.
+# 설계 참고용 목록이다. 실제 실행 모델은 서버의 AI_OFFICE_MODEL_* 환경 변수로만 선택한다.
 model_catalog:
   - id: codellmpro
     label: CodeLLMPro

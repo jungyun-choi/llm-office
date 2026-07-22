@@ -13,6 +13,7 @@ import type {
   AgentRuntimeRequest,
   AgentRuntimeResult,
 } from "./ports/agent-runtime";
+import { assertSafeCompanyOutputValue } from "../infrastructure/company-output-boundary";
 
 export type SequentialAnalysisRole = PocAgentRole | "orchestrator";
 
@@ -101,6 +102,7 @@ async function runRoleTurn(
     const turn = await options.executor.execute({ role, prompt, signal: request.signal });
     await emit(request, { role, status: "running", phase: "validating_output", attempt: 1 });
     const parsed = parseRoleOutput(turn.output, role);
+    assertSafeCompanyOutputValue(parsed);
     await emit(request, {
       role,
       status: "completed",
@@ -133,6 +135,7 @@ async function runBriefTurn(
     const turn = await options.executor.execute({ role, prompt, signal: request.signal });
     await emit(request, { role, status: "running", phase: "validating_output", attempt: 1 });
     const brief = parseBrief(turn.output);
+    assertSafeCompanyOutputValue(brief);
     await emit(request, {
       role,
       status: "completed",

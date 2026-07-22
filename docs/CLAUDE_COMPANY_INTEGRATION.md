@@ -15,16 +15,15 @@ UI와 업무 상태 머신은 다시 만들 필요가 없다.
 - Commit과 Push 분리, Push 기본 비활성
 - 실행기·저장소를 교체하기 위한 `AgentRuntime`, `SimulatorSource`, `JobExecutionPort`
 
-현재 합성 POC의 분석실은 요청당 OpenCode 프로세스 1개·모델 턴 1개로 여러 논리 역할의
-결과를 함께 만든다. 회사판에서는 같은 결과 schema를 유지하면서 실제 orchestrator/subagent
-fan-out으로 바꿀 수 있다.
+Zen 합성 POC는 요청당 OpenCode 프로세스 1개·모델 턴 1개로 여러 논리 역할의 결과를 함께
+만든다. `company` profile은 이미 같은 결과 schema로 여섯 독립 턴을 순차 실행한다.
 
 사내 모델에서 각 역할을 더 깊게 순차 실행하고 진행 상황을 좌석에 표시하는 정확한 연결
 계약은 [Company 5+1 순차 분석 연동](./COMPANY_SEQUENTIAL_ANALYSIS.md)을 따른다. 별도
 인메모리 status API를 만들지 않고 현재 SQLite Job polling에 붙인다.
-공개 골격의 순서·검증·progress 구현은
-`lib/poc/application/sequential-agent-runtime.ts`에 있으므로, 사내 branch에서는 인증된
-저수준 OpenCode turn executor와 승인된 역할 prompt loader만 주입한다.
+순서·검증·progress는 `sequential-agent-runtime.ts`, codemate 인증과 격리 실행은
+`company-turn-executor.ts`, 역할 지시는 `poc/company-prompts`에 구현돼 있다. 사내 포팅의
+첫 작업은 이 실행기를 다시 만드는 것이 아니라 실제 저장소용 source extension을 제공하는 것이다.
 
 ## 2. 역할 계약
 
@@ -56,21 +55,17 @@ fan-out으로 바꿀 수 있다.
 simulator는 adapter 검증 중 read-only로 시작하고, 최종 coding runtime에서만 승인된 worktree
 쓰기 권한을 연다.
 
-```bash
-cp ai-office/config/agents.example.yaml ai-office/config/agents.company.yaml
-cp ai-office/config/opencode.company.example.json ai-office/config/opencode.company.json
-chmod 600 ai-office/config/agents.company.yaml ai-office/config/opencode.company.json
-```
-
-회사 설정 파일과 credential은 Git에 넣지 않는다. 서버 환경 또는 회사 secret/config
-manager로 주입한다.
+`config/agents.example.yaml`과 `config/opencode.company.example.json`은 조사·환경 변수 매핑
+참고자료일 뿐 runtime이 읽는 OpenCode config가 아니다. 특히 후자를 `OPENCODE_CONFIG`로
+전달하거나 custom agent config로 복사하지 않는다. 회사 credential과 실제 경로는 Git에
+넣지 않고 서버 환경 또는 회사 secret/config manager로 주입한다.
 
 ## 4. 사내 전환에서 교체할 부분
 
 ### A. 분석 source
 
-`SyntheticSimulatorSource`와 합성 prompt를 그대로 확장하지 말고 별도의
-`InternalSimulatorSource`를 구현한다.
+simulator 저장소 안에 `ai-office-company-source-v1` extension을 구현한다. 정확한 export와
+검증 규칙은 [Company 5+1 문서](./COMPANY_SEQUENTIAL_ANALYSIS.md)를 따른다.
 
 - 설정된 repository root를 `realpath`로 고정한다.
 - `.LLM`, DLD, TopView, source/test 경로를 각각 allowlist로 받는다.
@@ -81,13 +76,16 @@ manager로 주입한다.
 
 ### B. 사내 OpenCode runtime
 
-`OpenCodeCliRuntime`의 company profile을 회사 실행 방식에 맞춘다.
+Company OpenCode runtime은 이미 구현돼 있다. 다음 경계를 수정하거나 우회하지 않고 회사
+CLI에서 실제로 성립하는지 검증한다.
 
-- provider URL과 credential은 환경/secret manager에서만 읽는다.
+- provider는 `codemate`, 기본 모델은 `codemate/CodeLLMPro`이며 credential은 전용 `0600`
+  auth 파일에서만 읽는다.
 - 외부 Zen/Codex fallback을 금지한다.
-- 모델은 서버 allowlist의 catalog id만 받는다.
-- orchestrator가 필요한 역할만 호출하고, 8GB 서버 기본값은 순차 실행으로 둔다.
-- 각 결과에 role, 실제 model id, source revision, prompt/profile digest를 기록한다.
+- 모델은 서버의 역할별 allowlist 환경 변수만 받는다.
+- `research → framework → estimate → test → git → orchestrator`를 정확히 한 번씩 순차 호출한다.
+- 요청/snapshot/prior result는 `0600` 파일로 전달하고 CLI argv에는 넣지 않는다.
+- 기본 인증 plugin은 유지하되 custom agent, `--agent`, `--pure`, MCP와 모든 tool은 금지한다.
 - 긴 호출은 `preparing_context → calling_model → validating_output` phase와 시작 시각만
   progress callback으로 기록한다. chain-of-thought나 가짜 퍼센트는 노출하지 않는다.
 - 기존 `PocModelOutput` schema와 role id는 유지한다.
@@ -120,17 +118,16 @@ Push와 force-push/merge/delete는 계속 금지한다.
 
 ## 5. 역할별 모델 배정
 
-[opencode.company.example.json](../config/opencode.company.example.json)은 역할별 기본 모델
-예시다.
+[opencode.company.example.json](../config/opencode.company.example.json)은 runtime에 주입하는
+파일이 아니라 역할별 서버 환경 변수 매핑 예시다.
 
 ```bash
-export AI_OFFICE_MODEL_ORCHESTRATOR='<company-provider>/<general-model>'
-export AI_OFFICE_MODEL_RESEARCH='<company-provider>/<general-model>'
-export AI_OFFICE_MODEL_FRAMEWORK='<company-provider>/CodeLLMPro'
-export AI_OFFICE_MODEL_ESTIMATE='<company-provider>/<general-model>'
-export AI_OFFICE_MODEL_TEST='<company-provider>/CodeLLMPro'
-export AI_OFFICE_MODEL_GIT='<company-provider>/CodeLLMPro'
-export AI_OFFICE_CLAUDE_MODEL='<company-provider>/<coding-model>'
+export AI_OFFICE_MODEL_ORCHESTRATOR='codemate/CodeLLMPro'
+export AI_OFFICE_MODEL_RESEARCH='codemate/CodeLLMPro'
+export AI_OFFICE_MODEL_FRAMEWORK='codemate/CodeLLMPro'
+export AI_OFFICE_MODEL_ESTIMATE='codemate/CodeLLMPro'
+export AI_OFFICE_MODEL_TEST='codemate/CodeLLMPro'
+export AI_OFFICE_MODEL_GIT='codemate/CodeLLMPro'
 ```
 
 현재 POC UI는 실제 runtime이 사용한 분석/코딩 모델을 상태에 표시하고, 배정은 서버 설정으로
@@ -156,22 +153,25 @@ AI_OFFICE_BRIDGE_TOKEN=<웹과-bridge가-공유하는-64자리-hex-난수>
 AI_OFFICE_AGENT_RUNTIME=opencode
 AI_OFFICE_OPENCODE_PROFILE=company
 AI_OFFICE_OPENCODE_BIN=/opt/company/bin/opencode
-AI_OFFICE_OPENCODE_MODEL=company/CodeLLMPro
+AI_OFFICE_OPENCODE_MODEL=codemate/CodeLLMPro
+AI_OFFICE_COMPANY_PROVIDER_ALLOWLIST=codemate
+AI_OFFICE_COMPANY_AUTH_FILE=/etc/ai-office/codemate-auth.json
+AI_OFFICE_NIKE_ROOT=/srv/company-workspace/simulator
+AI_OFFICE_EXTENSION_MODULE=/srv/company-workspace/simulator/deps/ai-office-source.mjs
+AI_OFFICE_EXTENSION_MODULE_SHA256=<sha256-64-hex>
+AI_OFFICE_COMPANY_DATA_ACK=protected-internal-only
+AI_OFFICE_COMPANY_ACCESS_CONTROL_ACK=authenticated-private-server
+AI_OFFICE_TRUSTED_PROXY_SECRET=<reverse-proxy와-공유하는-64-hex>
+AI_OFFICE_COMPANY_ALLOWED_USER=<authenticated-single-user-id>
 
-AI_OFFICE_CODING_ENABLED=1
-AI_OFFICE_CLAUDE_PROFILE=internal
-AI_OFFICE_CLAUDE_BIN=/opt/company/bin/claude
-AI_OFFICE_CLAUDE_MODEL=company/CodeLLMPro
-AI_OFFICE_CODING_REPO=/srv/company-workspace/simulator
-AI_OFFICE_CODING_ALLOWED_PATHS=<reviewed,comma-separated,repository-relative-paths>
+# 사내 coding JobExecutionPort를 포팅하기 전까지 0을 유지한다.
+AI_OFFICE_CODING_ENABLED=0
 AI_OFFICE_DATA_DIR=/var/lib/ai-office
 AI_OFFICE_GIT_PUSH_ENABLED=0
 ```
 
-실제 회사 source를 연결하기 전까지 OpenCode는 공개 `zen` 합성 profile,
-`AI_OFFICE_CLAUDE_PROFILE=synthetic`을 유지한다. 공개 설정에는 아직 `company` profile이
-없으므로 사내 adapter를 먼저 추가해야 하며, coding `internal`은
-`AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only` 없이는 열리지 않는다.
+실제 회사 source extension을 연결하기 전까지 OpenCode는 `zen` 합성 profile을 유지한다.
+Company 분석 profile은 구현돼 있지만 source/auth/접근통제 조건이 하나라도 빠지면 fail-closed한다.
 공개 저장소의 번들 `LocalJobExecutor`는 synthetic/macOS sandbox 전용이므로 internal profile을
 의도적으로 거부한다. Linux 회사 서버에서는 승인된 rootless container 실행기를
 `JobExecutionPort`로 연결한 뒤에만 coding을 활성화한다.
@@ -189,14 +189,16 @@ ai-office 저장소와 회사 simulator 저장소를 함께 분석해 줘.
 
 목표:
 1. 현재 UI, /api/v1/jobs, Job state/digest/version 승인 계약을 유지한다.
-2. SyntheticSimulatorSource와 합성 OpenCode profile만 회사용 adapter로 교체한다.
+2. 구현된 company 5+1 runtime은 유지하고 simulator 저장소 안에
+   ai-office-company-source-v1 extension을 구현한다.
 3. 실제 repository를 먼저 조사해 .LLM/DLD/TopView/common/FTL/FIL/HIL에 해당하는
    정확한 경로를 찾고 회사 설정으로 주입한다. 경로를 추측하거나 하드코딩하지 않는다.
-4. 사내 OpenCode endpoint와 회사 allowlist model만 사용한다. 외부 fallback은 금지한다.
+4. codemate provider와 승인된 역할별 model만 사용한다. 외부 fallback은 금지한다.
 5. 역할별 결과에 근거 파일 locator와 revision/digest를 남긴다.
 6. Claude coding은 승인된 worktree와 경로에서만 실행한다.
 7. 테스트는 server-owned command id allowlist로 실행한다.
 8. Commit/Push는 기존 사람 승인 gate를 우회하지 않는다.
+9. Git 이슈는 초안만 만들고 digest 기반 별도 승인/reconciliation 전에는 publish를 호출하지 않는다.
 
 먼저 read-only로 두 저장소의 실제 구조, 회사 OpenCode CLI 사용법, 모델 ID, 테스트 명령,
 Git 원격/branch 정책을 보고해. 확인되지 않은 값은 TODO로 남기고 작은 단계로 구현해.

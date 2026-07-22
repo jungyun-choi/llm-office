@@ -58,8 +58,8 @@ export interface PocCapabilities {
     deterministic: true;
   };
   dataPolicy: {
-    syntheticRepositoryOnly: true;
-    acceptsCompanyData: false;
+    syntheticRepositoryOnly: boolean;
+    acceptsCompanyData: boolean;
     externalModelReceivesSyntheticSnapshot: boolean;
   };
   bridgeToken?: string;

@@ -15,6 +15,7 @@ const prohibitedControlCharacters =
 const probableSecret =
   /(?:-----BEGIN [A-Z ]*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|authorization\s*:\s*bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[=:]\s*\S{8,})/iu;
 const parentPathSegment = /(?:^|[^.])\.\.(?=[/\\]|$)/u;
+const absoluteEvidencePath = /^(?:\/|[A-Za-z]:[\\/]|\\\\|file:\/\/)/iu;
 
 export const createPocRunSchema = z
   .object({
@@ -41,6 +42,10 @@ const evidenceSchema = z
   .refine(
     (value) => !parentPathSegment.test(value),
     "Evidence path cannot traverse directories",
+  )
+  .refine(
+    (value) => !absoluteEvidencePath.test(value),
+    "Evidence path must be repository-relative",
   );
 
 export const roleOutputSchema = z

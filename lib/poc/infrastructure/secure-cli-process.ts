@@ -41,6 +41,7 @@ export async function executeSecureCli(
 ): Promise<SecureCliProcessResult> {
   if (options.signal?.aborted) throw new PocRunnerError("aborted");
   const { spawn } = await import("node:child_process");
+  if (options.signal?.aborted) throw new PocRunnerError("aborted");
   const child = spawn(options.executable, options.args, {
     cwd: options.cwd,
     env: options.env,
@@ -84,6 +85,7 @@ function collect(
       terminate();
     };
     options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
 
     const onData = (collector: Collector) => (chunk: Buffer) => {
       if (append(collector, chunk)) return;

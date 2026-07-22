@@ -25,10 +25,11 @@ function isErrorEvent(event: JsonRecord): boolean {
 }
 
 function textFromEvent(event: JsonRecord): string | undefined {
-  if (event.type !== "text" || !isRecord(event.part)) {
-    return undefined;
+  if (isRecord(event.part) && typeof event.part.text === "string") {
+    if (event.type === "text" || event.part.type === "text") return event.part.text;
   }
-  return typeof event.part.text === "string" ? event.part.text : undefined;
+  if (event.type === "text" && typeof event.text === "string") return event.text;
+  return undefined;
 }
 
 function collectModelText(stdout: string): string {
@@ -87,12 +88,17 @@ function normalizeOpenCodeOutput(value: unknown): unknown {
 }
 
 export function parseOpenCodeOutput(stdout: string): PocModelOutput {
-  const modelText = collectModelText(stdout);
-  const output = findLastValidJsonObject(modelText, (value) =>
-    pocModelOutputSchema.parse(normalizeOpenCodeOutput(value)),
+  const parsed = pocModelOutputSchema.safeParse(
+    normalizeOpenCodeOutput(parseOpenCodeEventValue(stdout)),
   );
-  if (!output) {
-    throw new PocRunnerError("invalid_output");
-  }
+  if (!parsed.success) throw new PocRunnerError("invalid_output");
+  return parsed.data;
+}
+
+/** Parse OpenCode JSONL events without imposing a turn-specific output schema. */
+export function parseOpenCodeEventValue(stdout: string): unknown {
+  const modelText = collectModelText(stdout);
+  const output = findLastValidJsonObject(modelText, (value) => value);
+  if (output === undefined) throw new PocRunnerError("invalid_output");
   return output;
 }

@@ -250,15 +250,25 @@ function bridgeError(
   );
 }
 
-let shuttingDown = false;
-function shutdown(): void {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  server.close(() => {
-    jobSystem?.close();
-    process.exit(0);
+let shutdownPromise: Promise<void> | undefined;
+function shutdown(): Promise<void> {
+  shutdownPromise ??= shutdownOnce();
+  return shutdownPromise;
+}
+
+async function shutdownOnce(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+  await jobSystem?.close();
+  process.exitCode = 0;
+}
+
+function handleShutdownSignal(): void {
+  void shutdown().catch(() => {
+    process.exitCode = 1;
   });
 }
 
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);
+process.once("SIGINT", handleShutdownSignal);
+process.once("SIGTERM", handleShutdownSignal);

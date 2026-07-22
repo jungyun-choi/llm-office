@@ -1,5 +1,6 @@
 import { JobError } from "../domain/job-errors";
 import { jobErrorResponse, jobJsonResponse } from "./job-http";
+import { timingSafeEqual } from "node:crypto";
 
 const CAPABILITY_TIMEOUT_MS = 8_000;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -7,11 +8,14 @@ const MAX_REQUEST_BYTES = 8 * 1_024;
 const MAX_RESPONSE_BYTES = 4 * 1_024 * 1_024;
 const BRIDGE_START_RETRY_DELAYS_MS = [300, 700] as const;
 const BRIDGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u;
+const TRUSTED_PROXY_SECRET_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u;
+const TRUSTED_USER_PATTERN = /^[a-zA-Z0-9@._+-]{1,128}$/u;
 
 export async function proxyLocalJobCapabilities(request: Request): Promise<Response> {
   const correlationId = safeRequestId(request.headers.get("x-correlation-id"));
   try {
     assertProxyExecutionAllowed();
+    assertCompanyRequestAuthorized(request);
     assertSameOrigin(request);
     const bridgeToken = requireConfiguredBridgeToken();
     const response = await fetchBridgeWithStartupRetry(
@@ -39,6 +43,7 @@ export async function proxyLocalJobRequest(
   const correlationId = safeRequestId(request.headers.get("x-correlation-id"));
   try {
     assertProxyExecutionAllowed();
+    assertCompanyRequestAuthorized(request);
     assertSameOrigin(request);
     const bridgeToken = requireConfiguredBridgeToken();
     const body = request.method === "GET" || request.method === "HEAD"
@@ -96,6 +101,40 @@ function requireConfiguredBridgeToken(): string {
     503,
     false,
   );
+}
+
+function assertCompanyRequestAuthorized(request: Request): void {
+  const protectedDeployment = process.env.NODE_ENV === "production" ||
+    process.env.AI_OFFICE_OPENCODE_PROFILE === "company";
+  if (!protectedDeployment) return;
+  const configuredSecret = process.env.AI_OFFICE_TRUSTED_PROXY_SECRET;
+  const configuredUser = process.env.AI_OFFICE_COMPANY_ALLOWED_USER;
+  const presentedSecret = request.headers.get("x-ai-office-trusted-proxy");
+  const presentedUser = request.headers.get("x-ai-office-user");
+  if (
+    !configuredSecret ||
+    !TRUSTED_PROXY_SECRET_PATTERN.test(configuredSecret) ||
+    !configuredUser ||
+    !TRUSTED_USER_PATTERN.test(configuredUser) ||
+    !presentedSecret ||
+    !presentedUser ||
+    !safeEqual(presentedSecret, configuredSecret) ||
+    !safeEqual(presentedUser, configuredUser)
+  ) {
+    throw new JobError(
+      "COMPANY_ACCESS_DENIED",
+      "인증된 사내 개인 서버를 통해서만 회사 업무에 접근할 수 있습니다.",
+      401,
+      false,
+    );
+  }
+}
+
+function safeEqual(left: string, right: string): boolean {
+  const leftBytes = Buffer.from(left, "utf8");
+  const rightBytes = Buffer.from(right, "utf8");
+  return leftBytes.byteLength === rightBytes.byteLength &&
+    timingSafeEqual(leftBytes, rightBytes);
 }
 
 function assertSameOrigin(request: Request): void {

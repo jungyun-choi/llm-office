@@ -23,8 +23,8 @@ export const pocCapabilitiesSchema = z.object({
   }),
   fallback: z.object({ available: z.literal(true), deterministic: z.literal(true) }),
   dataPolicy: z.object({
-    syntheticRepositoryOnly: z.literal(true),
-    acceptsCompanyData: z.literal(false),
+    syntheticRepositoryOnly: z.boolean(),
+    acceptsCompanyData: z.boolean(),
     externalModelReceivesSyntheticSnapshot: z.boolean(),
   }),
 });

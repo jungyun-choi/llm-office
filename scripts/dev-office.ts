@@ -8,9 +8,12 @@ const childEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
   AI_OFFICE_BRIDGE_TOKEN: randomBytes(32).toString("base64url"),
 };
+const bridgeScript = process.env.AI_OFFICE_OPENCODE_PROFILE === "company"
+  ? "poc:bridge:company"
+  : "poc:bridge:office:poc";
 let stopping = false;
 
-children.push(start(["run", "poc:bridge:office:poc"]));
+children.push(start(["run", bridgeScript]));
 children.push(start(["run", "dev:poc", "--", ...webArguments]));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

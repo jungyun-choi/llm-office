@@ -7,6 +7,9 @@ import type {
   AgentRuntimeRequest,
   AgentRuntimeResult,
 } from "../application/ports/agent-runtime";
+import { runSequentialAgentRuntime } from "../application/sequential-agent-runtime";
+import { CompanyTurnExecutor, hasTrustedCompanyAuth } from "./company-turn-executor";
+import { loadCompanyPrompt } from "./company-prompt-loader";
 import { getOpenCodeRuntimeConfig } from "./opencode-runtime-config";
 import { parseOpenCodeOutput } from "./opencode-output-parser";
 import {
@@ -22,10 +25,13 @@ const EXECUTABLE_NAME = "opencode";
 const REQUIRED_OPENCODE_VERSION = "1.4.3";
 const AVAILABILITY_TTL_MS = 30_000;
 const RUNTIME_DIRECTORY_PREFIX = "ai-office-flashsim-";
-let availabilityCache: { checkedAt: number; executable?: string } | undefined;
+let availabilityCache: { key: string; checkedAt: number; executable?: string } | undefined;
 
 async function executableCandidates(): Promise<string[]> {
   const configured = process.env.AI_OFFICE_OPENCODE_BIN;
+  if (process.env.AI_OFFICE_OPENCODE_PROFILE === "company") {
+    return configured && path.isAbsolute(configured) ? [path.normalize(configured)] : [];
+  }
   const home = process.env.HOME;
   const candidates = configured && path.isAbsolute(configured) ? [configured] : [];
   if (home) candidates.push(path.join(home, ".opencode", "bin", EXECUTABLE_NAME));
@@ -36,14 +42,20 @@ async function executableCandidates(): Promise<string[]> {
 }
 
 export async function findOpenCodeExecutable(): Promise<string | undefined> {
+  const cacheKey = executableCacheKey();
+  const companyProfile = process.env.AI_OFFICE_OPENCODE_PROFILE === "company";
   if (
+    !companyProfile &&
     availabilityCache &&
+    availabilityCache.key === cacheKey &&
     Date.now() - availabilityCache.checkedAt < AVAILABILITY_TTL_MS
   ) {
     return availabilityCache.executable;
   }
   const executable = await findExecutableWithoutCache();
-  availabilityCache = { checkedAt: Date.now(), executable };
+  if (!companyProfile) {
+    availabilityCache = { key: cacheKey, checkedAt: Date.now(), executable };
+  }
   return executable;
 }
 
@@ -55,9 +67,12 @@ async function findExecutableWithoutCache(): Promise<string | undefined> {
       const resolved = await realpath(candidate);
       const executable = await stat(resolved);
       if (
+        (process.env.AI_OFFICE_OPENCODE_PROFILE !== "company" ||
+          (path.normalize(candidate) === resolved &&
+            await hasTrustedExecutableAncestors(resolved))) &&
         path.basename(resolved) === EXECUTABLE_NAME &&
         executable.isFile() &&
-        isTrustedExecutable(executable) &&
+        isTrustedOpenCodeExecutable(executable) &&
         await hasRequiredVersion(resolved)
       ) {
         return resolved;
@@ -69,9 +84,39 @@ async function findExecutableWithoutCache(): Promise<string | undefined> {
   return undefined;
 }
 
-function isTrustedExecutable(file: { uid: number; mode: number }): boolean {
-  const ownedByProcess = typeof process.getuid !== "function" || file.uid === process.getuid();
-  return ownedByProcess && (file.mode & 0o022) === 0;
+async function hasTrustedExecutableAncestors(executable: string): Promise<boolean> {
+  const { lstat } = await import("node:fs/promises");
+  let current = path.dirname(executable);
+  while (true) {
+    const stat = await lstat(current);
+    const trustedOwner = stat.uid === 0 ||
+      typeof process.getuid !== "function" || stat.uid === process.getuid();
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !trustedOwner || (stat.mode & 0o022) !== 0) {
+      return false;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
+}
+
+function executableCacheKey(): string {
+  const profile = process.env.AI_OFFICE_OPENCODE_PROFILE ?? "internal";
+  if (profile === "company") {
+    return `company:${process.env.AI_OFFICE_OPENCODE_BIN ?? ""}`;
+  }
+  return [
+    profile,
+    process.env.AI_OFFICE_OPENCODE_BIN ?? "",
+    process.env.HOME ?? "",
+    process.env.PATH ?? "",
+  ].join("\u0000");
+}
+
+export function isTrustedOpenCodeExecutable(file: { uid: number; mode: number }): boolean {
+  const trustedOwner = file.uid === 0 ||
+    typeof process.getuid !== "function" || file.uid === process.getuid();
+  return trustedOwner && (file.mode & 0o022) === 0;
 }
 
 async function hasRequiredVersion(executable: string): Promise<boolean> {
@@ -141,15 +186,26 @@ export async function canRunOpenCode(): Promise<boolean> {
   if (!config.enabled) return false;
   if (!(await hasUsableModelCatalog(config))) return false;
   if (!(await hasSafeZenGlobalConfig(config))) return false;
+  if (config.profile === "company" && !(await hasTrustedCompanyAuth(config))) return false;
   return Boolean(await findOpenCodeExecutable());
 }
 
 async function runOpenCodePoc(request: AgentRuntimeRequest): Promise<AgentRuntimeResult> {
-  await assertSyntheticSourceBoundary(request.source);
   const config = getOpenCodeRuntimeConfig();
   if (!config.enabled) throw new PocRunnerError("unavailable");
+  if (config.profile !== "company") await assertSyntheticSourceBoundary(request.source);
   const executable = await findOpenCodeExecutable();
   if (!executable) throw new PocRunnerError("unavailable");
+  if (config.profile === "company") {
+    if (!(await hasTrustedCompanyAuth(config))) throw new PocRunnerError("unavailable");
+    return runSequentialAgentRuntime(request, {
+      runtimeId: "opencode-cli",
+      runtimeLabel: config.runtimeLabel,
+      model: config.model,
+      promptFor: loadCompanyPrompt,
+      executor: new CompanyTurnExecutor(executable, config),
+    });
+  }
   const runtimeDirectory = await prepareRuntimeDirectory();
 
   try {

@@ -1,56 +1,31 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:AI_OFFICE_MODEL_ORCHESTRATOR}",
-  "share": "disabled",
-  "autoupdate": false,
-  "permission": {
-    "*": "deny",
-    "read": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "external_directory": "deny",
-    "edit": "deny",
-    "bash": "deny",
-    "webfetch": "deny",
-    "websearch": "deny"
+  "note": "AI Office 서버 환경변수 매핑 예시입니다. OpenCode의 OPENCODE_CONFIG 또는 custom agent config로 전달하지 마세요.",
+  "profile": "company",
+  "providerAllowlist": ["codemate"],
+  "models": {
+    "orchestrator": "{env:AI_OFFICE_MODEL_ORCHESTRATOR}",
+    "research": "{env:AI_OFFICE_MODEL_RESEARCH}",
+    "framework": "{env:AI_OFFICE_MODEL_FRAMEWORK}",
+    "estimate": "{env:AI_OFFICE_MODEL_ESTIMATE}",
+    "test": "{env:AI_OFFICE_MODEL_TEST}",
+    "git": "{env:AI_OFFICE_MODEL_GIT}"
   },
-  "agent": {
-    "orchestrator": {
-      "description": "요청을 분해하고 전문 결과를 Claude 인계팩으로 통합한다",
-      "mode": "primary",
-      "model": "{env:AI_OFFICE_MODEL_ORCHESTRATOR}",
-      "permission": { "task": "allow" }
-    },
-    "research": {
-      "description": ".LLM Wiki와 DLD에서 상세 스펙과 근거를 찾는다",
-      "mode": "subagent",
-      "model": "{env:AI_OFFICE_MODEL_RESEARCH}",
-      "permission": { "task": "deny" }
-    },
-    "framework": {
-      "description": "common, FTL, FIL, HIL 코드와 성능 모델 영향을 분석한다",
-      "mode": "subagent",
-      "model": "{env:AI_OFFICE_MODEL_FRAMEWORK}",
-      "permission": { "task": "deny" }
-    },
-    "estimate": {
-      "description": "TopView 패킷 흐름을 기준으로 영향 범위와 상대 공수를 정리한다",
-      "mode": "subagent",
-      "model": "{env:AI_OFFICE_MODEL_ESTIMATE}",
-      "permission": { "task": "deny" }
-    },
-    "test": {
-      "description": "기능, 회귀, 성능 모델 정합성 테스트를 설계한다",
-      "mode": "subagent",
-      "model": "{env:AI_OFFICE_MODEL_TEST}",
-      "permission": { "task": "deny" }
-    },
-    "git": {
-      "description": "Claude 코딩 인계팩과 Git 이슈 초안을 작성한다",
-      "mode": "subagent",
-      "model": "{env:AI_OFFICE_MODEL_GIT}",
-      "permission": { "task": "deny" }
-    }
+  "runtimePolicy": {
+    "sequentialOrder": [
+      "research",
+      "framework",
+      "estimate",
+      "test",
+      "git",
+      "orchestrator"
+    ],
+    "turnTimeoutMs": 3600000,
+    "automaticRetries": 0,
+    "tools": false,
+    "permissions": "deny",
+    "mcp": false,
+    "customAgents": false,
+    "pureFlag": false,
+    "defaultPluginsRequiredForCodemateAuth": true
   }
 }

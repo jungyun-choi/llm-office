@@ -138,6 +138,52 @@ describe("single-server job proxy", () => {
     assert.equal(response.status, 403);
     assert.equal(called, false);
   });
+
+  test("company jobs require the trusted proxy secret and one allowlisted user", async () => {
+    enableProxy();
+    process.env.AI_OFFICE_OPENCODE_PROFILE = "company";
+    process.env.AI_OFFICE_TRUSTED_PROXY_SECRET = "p".repeat(43);
+    process.env.AI_OFFICE_COMPANY_ALLOWED_USER = "jungyun.choi";
+    let called = 0;
+    globalThis.fetch = async (_input, init) => {
+      called += 1;
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("x-ai-office-trusted-proxy"), null);
+      assert.equal(headers.get("x-ai-office-user"), null);
+      return Response.json({ items: [] });
+    };
+
+    const missing = await proxyLocalJobRequest(
+      new Request("http://office.local/api/v1/jobs"),
+      "/api/v1/jobs",
+    );
+    assert.equal(missing.status, 401);
+    assert.equal(called, 0);
+
+    const wrongUser = await proxyLocalJobRequest(
+      new Request("http://office.local/api/v1/jobs", {
+        headers: {
+          "x-ai-office-trusted-proxy": "p".repeat(43),
+          "x-ai-office-user": "someone-else",
+        },
+      }),
+      "/api/v1/jobs",
+    );
+    assert.equal(wrongUser.status, 401);
+    assert.equal(called, 0);
+
+    const authorized = await proxyLocalJobRequest(
+      new Request("http://office.local/api/v1/jobs", {
+        headers: {
+          "x-ai-office-trusted-proxy": "p".repeat(43),
+          "x-ai-office-user": "jungyun.choi",
+        },
+      }),
+      "/api/v1/jobs",
+    );
+    assert.equal(authorized.status, 200);
+    assert.equal(called, 1);
+  });
 });
 
 describe("local job controller HTTP mapping", () => {
