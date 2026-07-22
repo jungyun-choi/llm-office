@@ -6,40 +6,35 @@ import { OfficeHeader } from "./components/office-header";
 import { ResultDrawer } from "./components/result-drawer";
 import { useCurrentTime } from "./hooks/use-current-time";
 import { useOfficeWorkflow } from "./hooks/use-office-workflow";
-import { usePocTransport } from "./hooks/use-poc-transport";
 
 export function OfficeClient() {
   const currentTime = useCurrentTime();
-  const transport = usePocTransport();
-  const workflow = useOfficeWorkflow({
-    resolveEndpoint: transport.resolveEndpoint,
-  });
+  const workflow = useOfficeWorkflow();
 
   return (
     <div className="office-app">
       <a className="skip-link" href="#main-content">{OFFICE_COPY.accessibility.skipToMain}</a>
       <OfficeHeader
         currentTime={currentTime}
-        connectionMode={transport.connectionMode}
-        onRetryConnection={transport.retryConnection}
+        connectionMode={workflow.connectionMode}
+        onRetryConnection={workflow.retryConnection}
       />
       <main className="office-main" id="main-content">
         <OfficeFloor
-          status={workflow.status}
-          currentStage={workflow.currentStage}
-          currentRequest={workflow.currentRequest}
+          jobs={workflow.jobs}
+          focusJob={workflow.focusJob}
           results={workflow.results}
+          capabilities={workflow.capabilities}
+          connectionMode={workflow.connectionMode}
+          serverError={workflow.serverError}
+          actionError={workflow.actionError}
+          isSubmitting={workflow.isSubmitting}
+          busyJobId={workflow.busyJobId}
           onRequest={workflow.startWorkflow}
+          onAction={workflow.runAction}
+          onJobSelect={workflow.selectJob}
           onResultOpen={workflow.openResult}
-          errorMessage={workflow.errorMessage}
-          isResultArriving={workflow.isResultArriving}
-          connectionMode={transport.connectionMode}
-          elapsedSeconds={workflow.elapsedSeconds}
-          tasks={workflow.tasks}
-          errorAgentIds={workflow.errorAgentIds}
-          queueErrorMessage={workflow.queueErrorMessage}
-          onTaskCancel={workflow.cancelTask}
-          onTaskHistoryClear={workflow.clearTaskHistory}
+          onRetryConnection={workflow.retryConnection}
         />
       </main>
       <ResultDrawer result={workflow.selectedResult} onClose={workflow.closeResult} />

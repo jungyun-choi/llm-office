@@ -2,10 +2,23 @@ import type { PocFallbackReason } from "../../domain/poc-types";
 import type { PocModelOutput } from "../../domain/poc-schema";
 import type { SimulatorSourceContext } from "./simulator-source";
 
+export interface AgentRuntimeProgress {
+  role: "orchestrator" | "research" | "framework" | "estimate" | "test" | "git";
+  status: "pending" | "running" | "completed" | "failed";
+  phase?: "preparing_context" | "calling_model" | "validating_output";
+  attempt?: number;
+  summary?: string;
+}
+
+export type AgentRuntimeProgressCallback = (
+  progress: AgentRuntimeProgress,
+) => unknown | Promise<unknown>;
+
 export interface AgentRuntimeRequest {
   featureRequest: string;
   source: SimulatorSourceContext;
   signal?: AbortSignal;
+  onProgress?: AgentRuntimeProgressCallback;
 }
 
 export interface AgentRuntimeResult {

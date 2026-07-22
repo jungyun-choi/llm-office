@@ -15,8 +15,29 @@ export type AgentSeat =
   | "south";
 
 export type AgentFlowState = "idle" | "sending" | "receiving" | "complete" | "error";
+export type AnalysisStageStatus = "pending" | "running" | "completed" | "failed";
+export type AnalysisStagePhase = "preparing_context" | "calling_model" | "validating_output";
 export type WorkflowStatus = "idle" | "running" | "complete" | "error";
 export type OfficeTaskStatus = "pending" | "running" | "completed" | "failed";
+
+export type OfficeJobState =
+  | "queued"
+  | "analyzing"
+  | "awaiting_coding_approval"
+  | "coding_queued"
+  | "coding"
+  | "testing"
+  | "changes_ready"
+  | "publishing"
+  | "completed"
+  | "failed"
+  | "canceled";
+
+export type OfficeJobAction = "approve_coding" | "publish_changes" | "cancel" | "retry";
+export type PublishMode = "commit" | "commit_and_push";
+export type OfficeConnectionMode = "checking" | "server" | "disconnected";
+export type DevelopmentStationId = "claude" | "implementation" | "verification" | "publisher";
+export type DevelopmentFlowState = "idle" | "queued" | "working" | "waiting" | "complete" | "error";
 
 export interface OfficeAgent {
   id: AgentId;
@@ -110,4 +131,107 @@ export interface OfficeTask {
   result?: OfficeResult;
   errorMessage?: string;
   errorAgentIds?: readonly AgentId[];
+}
+
+export interface OfficeCapabilities {
+  canCommit: boolean;
+  canPush: boolean;
+  analysisRuntimeLabel?: string;
+  codingRuntimeLabel?: string;
+}
+
+export interface OfficeChangedFile {
+  path: string;
+  status?: string;
+}
+
+export interface OfficeCodingTest {
+  status: "not_run" | "pending" | "running" | "passed" | "failed" | "skipped" | "unknown";
+  command?: string;
+  output?: string;
+}
+
+export interface OfficeCodingResult {
+  runtimeLabel?: string;
+  model?: string;
+  branchName?: string;
+  baseSha?: string;
+  changedFiles: readonly OfficeChangedFile[];
+  changedFileCount?: number;
+  diff?: string;
+  diffTruncated: boolean;
+  summary?: string;
+  test?: OfficeCodingTest;
+  commitSha?: string;
+  pushed?: boolean;
+  changesDigest?: string;
+}
+
+export interface OfficeJobActions {
+  approveCoding: boolean;
+  cancel: boolean;
+  retry: boolean;
+  publishCommit: boolean;
+  publishAndPush: boolean;
+}
+
+export interface OfficeJobError {
+  code?: string;
+  message: string;
+  retryable?: boolean;
+  stage?: "analysis" | "coding" | "testing" | "publishing" | "queue";
+}
+
+export interface OfficeJobEvent {
+  id?: string;
+  type?: string;
+  message?: string;
+  createdAt?: string;
+  agentId?: string;
+}
+
+export interface OfficeAnalysisStage {
+  id: AgentId;
+  status: AnalysisStageStatus;
+  phase?: AnalysisStagePhase;
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  attempt?: number;
+  summary?: string;
+}
+
+export interface OfficeAnalysisPreview {
+  jobId: string;
+  runId: string;
+  title: string;
+  objective: string;
+  completedAt: string;
+}
+
+export interface OfficeResultPreview {
+  jobId: string;
+  runId: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+}
+
+export interface OfficeJob {
+  id: string;
+  prompt: string;
+  state: OfficeJobState;
+  createdAt: string;
+  updatedAt?: string;
+  queuePosition?: number;
+  detailLevel?: "summary" | "full";
+  analysis?: unknown;
+  analysisPreview?: OfficeAnalysisPreview;
+  analysisStages: readonly OfficeAnalysisStage[];
+  coding?: OfficeCodingResult;
+  error?: OfficeJobError;
+  events: readonly OfficeJobEvent[];
+  actions: OfficeJobActions;
+  version?: number;
+  codingPacketDigest?: string;
 }

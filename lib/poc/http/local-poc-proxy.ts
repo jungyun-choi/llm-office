@@ -2,27 +2,31 @@ import { PocError } from "../domain/poc-errors";
 import type { PocCapabilities } from "../domain/poc-types";
 import { errorResponse, jsonResponse, parsePocRequest } from "./poc-http";
 
-const BRIDGE_BASE_URL = "http://127.0.0.1:4317/api/v1/poc";
 const CAPABILITY_TIMEOUT_MS = 8_000;
 const BRIDGE_START_RETRY_DELAYS_MS = [300, 700] as const;
-const BRIDGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
+const BRIDGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u;
 
-interface BridgeCapabilities extends PocCapabilities {
-  bridgeToken: string;
+interface CapabilityResult {
+  response: Response;
+  payload: unknown;
 }
 
 export function isLocalPocProxyEnabled(): boolean {
-  return process.env.NODE_ENV !== "production" &&
-    process.env.AI_OFFICE_LOCAL_PROXY_ENABLED === "1";
+  if (process.env.AI_OFFICE_LOCAL_PROXY_ENABLED !== "1") return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  return process.env.AI_OFFICE_DEPLOYMENT_MODE === "internal" &&
+    process.env.AI_OFFICE_INTERNAL_EXECUTION_ACK === "on-prem-only";
 }
 
 export async function proxyLocalPocCapabilities(): Promise<Response> {
   const correlationId = crypto.randomUUID();
   try {
-    const capabilities = await readBridgeCapabilities();
-    const browserSafeCapabilities: Partial<BridgeCapabilities> = { ...capabilities };
-    delete browserSafeCapabilities.bridgeToken;
-    return jsonResponse(browserSafeCapabilities, 200, correlationId);
+    const bridgeToken = requireConfiguredBridgeToken();
+    const result = await readBridgeCapabilities(bridgeToken);
+    if (result.response.ok && !isBridgeCapabilities(result.payload)) {
+      throw invalidBridgeResponse();
+    }
+    return jsonResponse(result.payload, result.response.status, correlationId, safeResponseHeaders(result.response));
   } catch (error) {
     return errorResponse(error, correlationId);
   }
@@ -31,37 +35,62 @@ export async function proxyLocalPocCapabilities(): Promise<Response> {
 export async function proxyLocalPocRun(request: Request): Promise<Response> {
   let correlationId = crypto.randomUUID();
   try {
+    const bridgeToken = requireConfiguredBridgeToken();
     const context = await parsePocRequest(request);
     correlationId = context.correlationId;
-    const capabilities = await readBridgeCapabilities();
-    if (!capabilities.agentRuntime.enabled || !capabilities.agentRuntime.available) {
+    const capabilityResult = await readBridgeCapabilities(bridgeToken);
+    if (!capabilityResult.response.ok) {
+      return jsonResponse(
+        capabilityResult.payload,
+        capabilityResult.response.status,
+        correlationId,
+        safeResponseHeaders(capabilityResult.response),
+      );
+    }
+    if (!isBridgeCapabilities(capabilityResult.payload)) throw invalidBridgeResponse();
+    if (
+      !capabilityResult.payload.agentRuntime.enabled ||
+      !capabilityResult.payload.agentRuntime.available
+    ) {
       throw localRunnerUnavailable();
     }
 
-    const response = await fetch(`${BRIDGE_BASE_URL}/runs`, {
+    const response = await fetch(`${bridgeBaseUrl()}/runs`, {
       method: "POST",
       cache: "no-store",
       credentials: "omit",
       headers: {
         "content-type": "application/json",
         "idempotency-key": context.idempotencyKey,
-        "x-ai-office-bridge-token": capabilities.bridgeToken,
+        "x-ai-office-bridge-token": bridgeToken,
         "x-correlation-id": context.correlationId,
       },
       body: JSON.stringify(context.input),
       signal: request.signal,
     });
     const payload = await readJson(response);
-    return jsonResponse(payload, response.status, correlationId);
+    return jsonResponse(payload, response.status, correlationId, safeResponseHeaders(response));
   } catch (error) {
     return errorResponse(error, correlationId);
   }
 }
 
-async function readBridgeCapabilities(): Promise<BridgeCapabilities> {
+function requireConfiguredBridgeToken(): string {
+  const token = process.env.AI_OFFICE_BRIDGE_TOKEN;
+  if (token && BRIDGE_TOKEN_PATTERN.test(token)) return token;
+  throw new PocError(
+    "BRIDGE_TOKEN_MISSING",
+    "서버의 실행 브리지 인증이 구성되지 않았습니다.",
+    503,
+    false,
+  );
+}
+
+async function readBridgeCapabilities(bridgeToken: string): Promise<CapabilityResult> {
   for (let attempt = 0; attempt <= BRIDGE_START_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
-      return await fetchBridgeCapabilities();
+      const response = await fetchBridgeCapabilities(bridgeToken);
+      return { response, payload: await readJson(response) };
     } catch (error) {
       if (
         error instanceof PocError ||
@@ -77,23 +106,28 @@ async function readBridgeCapabilities(): Promise<BridgeCapabilities> {
   throw localRunnerUnavailable();
 }
 
-async function fetchBridgeCapabilities(): Promise<BridgeCapabilities> {
+async function fetchBridgeCapabilities(bridgeToken: string): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CAPABILITY_TIMEOUT_MS);
   try {
-    const response = await fetch(`${BRIDGE_BASE_URL}/capabilities`, {
+    return await fetch(`${bridgeBaseUrl()}/capabilities`, {
       method: "GET",
       cache: "no-store",
       credentials: "omit",
+      headers: { "x-ai-office-bridge-token": bridgeToken },
       signal: controller.signal,
     });
-    if (!response.ok) throw localRunnerUnavailable();
-    const payload = await readJson(response);
-    if (!isBridgeCapabilities(payload)) throw localRunnerUnavailable();
-    return payload;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function bridgeBaseUrl(): string {
+  const configured = Number(process.env.AI_OFFICE_BRIDGE_PORT ?? 4317);
+  const port = Number.isInteger(configured) && configured >= 1_024 && configured <= 65_535
+    ? configured
+    : 4317;
+  return `http://127.0.0.1:${port}/api/v1/poc`;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -104,13 +138,12 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function isBridgeCapabilities(value: unknown): value is BridgeCapabilities {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<BridgeCapabilities>;
+function isBridgeCapabilities(value: unknown): value is PocCapabilities {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<PocCapabilities>;
   return candidate.apiVersion === "v1" &&
     candidate.environment === "local" &&
-    typeof candidate.bridgeToken === "string" &&
-    BRIDGE_TOKEN_PATTERN.test(candidate.bridgeToken) &&
+    !("bridgeToken" in candidate) &&
     Boolean(candidate.agentRuntime) &&
     typeof candidate.agentRuntime?.enabled === "boolean" &&
     typeof candidate.agentRuntime?.available === "boolean";
@@ -120,8 +153,26 @@ async function readJson(response: Response): Promise<unknown> {
   try {
     return await response.json() as unknown;
   } catch {
-    throw new PocError("INVALID_BRIDGE_RESPONSE", "로컬 POC 응답을 확인하지 못했습니다.", 502, true);
+    throw invalidBridgeResponse();
   }
+}
+
+function safeResponseHeaders(response: Response): HeadersInit {
+  const headers: Record<string, string> = {};
+  for (const name of ["retry-after", "x-idempotent-replay"] as const) {
+    const value = response.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  return headers;
+}
+
+function invalidBridgeResponse(): PocError {
+  return new PocError(
+    "INVALID_BRIDGE_RESPONSE",
+    "로컬 POC 응답을 확인하지 못했습니다.",
+    502,
+    true,
+  );
 }
 
 function localRunnerUnavailable(): PocError {

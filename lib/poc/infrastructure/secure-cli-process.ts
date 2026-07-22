@@ -15,6 +15,7 @@ export interface SecureCliProcessOptions {
 
 export interface SecureCliProcessResult {
   stdout: string;
+  stderr: string;
   exitCode: number | null;
   timedOut: boolean;
   aborted: boolean;
@@ -96,6 +97,7 @@ function collect(
       finish(() =>
         resolve({
           stdout: Buffer.concat(stdout.chunks).toString("utf8"),
+          stderr: Buffer.concat(stderr.chunks).toString("utf8"),
           exitCode,
           timedOut,
           aborted,

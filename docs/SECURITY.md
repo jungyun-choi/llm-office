@@ -15,9 +15,9 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 3. **완전 온프레미스가 기본 배포안이다**: 제한정보를 다루는 조사, 추론, 인덱싱, 산출물 생성과 Git 쓰기는 사내에서 수행한다.
 4. **Outbound-only는 조건부 예외다**: 외부에는 `EXPORT-SANITIZED` 판정을 받은 구조화 산출물만 보낼 수 있다. Outbound-only는 인바운드 공격면을 줄이지만 데이터 반출 위험을 없애지는 않는다.
 5. **모델은 권한 주체가 아니다**: LLM은 제안을 만들 뿐이다. 인증, 권한 확인, 정책 판정, DLP, 승인, 도구 실행은 결정론적 코드가 수행한다.
-6. **Git 쓰기는 원문 해시와 결합된 사람 승인 뒤에만 가능하다**: 초안이 한 글자라도 바뀌면 기존 승인은 무효다.
+6. **코딩과 Git 쓰기는 산출물 해시에 결합된 별도 사람 승인 뒤에만 가능하다**: 분석 패킷이나 Diff가 한 글자라도 바뀌면 기존 승인은 무효다.
 7. **실패 시 닫힌다**: 신원, 정책, DLP, 서명, 감사 기록 중 하나라도 확인할 수 없으면 반출과 Git 쓰기를 중지한다.
-8. **코드 변경은 범위 밖이다**: 초기 AI Office의 유일한 Git 쓰기 동작은 승인된 이슈 생성이다. push, branch, commit, PR, merge, release, issue 수정/종료는 명시적으로 거부한다.
+8. **코딩 권한은 격리한다**: 분석 에이전트는 read-only다. 승인된 coding runtime만 업무 전용 worktree와 경로 allowlist를 수정할 수 있고, 별도 승인 전 Commit/Push는 금지한다. main 직접 쓰기, force-push, merge, release와 삭제는 계속 거부한다.
 
 이 문서에서 프롬프트 인젝션은 문서나 사용자 입력에 숨긴 지시문으로 모델의 원래 규칙을 바꾸려는 공격을 뜻한다. DLP(Data Loss Prevention)는 민감정보가 허용되지 않은 경계 밖으로 나가는 것을 탐지하고 차단하는 통제다. 킬스위치는 사고 시 특정 기능이나 전체 실행을 즉시 멈추는 독립적인 차단 장치다.
 
@@ -150,13 +150,14 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 - `SyntheticSimulatorSource`의 canonical root, 정책 파일과 결과 schema digest가 정확히 일치할 때만 실행한다.
 - 사용자의 입력 원문은 외부 모델에 전달하지 않는다. 결정론적 코드가 미리 정의한 `Synthetic FlashSim` 기능 시나리오 중 하나로 치환하며, 그 시나리오와 합성 snapshot만 임시 작업 공간에 복사한다.
 - OpenCode CLI 버전, 실행 파일 소유권, Zen endpoint, 무료 모델 allowlist와 모델 catalog를 검증한다. project config, plugin, MCP, tool, shell, browser, LSP와 파일 쓰기는 fail-closed로 비활성화한다.
-- bridge는 `127.0.0.1:4317`에만 bind하고 브라우저 `Origin`을 모두 거부한다. 웹서버가 loopback에서만 임시 bearer token을 받아 same-origin `/api/v1/poc/*`로 중계한다.
-- token discovery는 동일 OS 계정의 로컬 프로세스를 신뢰하며 Unix socket 또는 상호 인증을 사용하지 않는다. 따라서 악성 로컬 프로세스나 port 선점 공격은 이 POC의 수용된 잔여 위험이다.
+- bridge는 `127.0.0.1:4317`에만 bind하고 브라우저 `Origin`을 모두 거부한다. 웹서버가 loopback에서만 임시 bearer token을 받아 same-origin `/api/v1/poc/*`와 `/api/v1/jobs/*`로 중계한다.
+- bridge token은 32-byte 이상 난수로 웹과 bridge 프로세스에 동일하게 주입한다. capability 응답이나 브라우저에는 노출하지 않고, 미설정·형식 오류 시 양쪽 모두 fail-closed한다. 다만 loopback TCP와 동일 OS 계정을 사용하므로 악성 로컬 프로세스나 port 선점 공격은 이 POC의 잔여 위험이다. 회사 운영에서는 별도 OS identity와 Unix socket 또는 mTLS로 교체한다.
 - 모바일용 웹서버에는 별도 사용자 인증이 없다. `0.0.0.0`이 아니라 정확한 Tailscale IP에 bind하고 tailnet ACL로 허용 모바일을 제한한다. 인터넷, 공용 Wi-Fi 또는 회사 네트워크에 직접 공개하지 않는다.
 - OpenCode 1.4.3의 무인증 무료 Zen 모델 검색 제약 때문에 실제 사용자 XDG config/data/cache를 읽는다. `HOME`, state, temp와 작업 디렉터리는 격리하지만 글로벌 인증·cache·session 상태는 완전히 격리되지 않으며, bridge를 같은 OS 계정으로 실행하는 모든 로컬 프로세스를 신뢰한다.
-- bridge 자체는 시간당 10건, 동시 실행 1건, 서버 대기열 0건, 단일 모델 시도와 timeout으로 제한한다. 합성 POC UI는 브라우저에 최대 10건만 임시 보관해 한 건씩 bridge로 전달하며 대기 취소와 히스토리 삭제를 제공한다. 저장된 작업도 복원 시 같은 상한을 적용한다. 실패한 요청을 다른 provider 또는 합성 데모로 자동 재전송하지 않는다.
+- bridge는 분석·코딩 모델 프로세스를 한 번에 하나씩만 실행한다. 업무는 권한 `0600`의 SQLite FIFO에 저장되고, 요청·액션 idempotency와 version 검사를 적용한다. 실행 중 재시작은 자동 게시하지 않고 안전한 실패/재시도 상태로 복구한다. 실패한 요청을 다른 provider 또는 합성 데모로 자동 재전송하지 않는다.
+- 합성 Claude 코딩은 분석 digest를 사람이 승인한 뒤 repository 밖의 업무별 worktree에서만 시작한다. 번들 실행기는 macOS `sandbox-exec`가 없으면 fail-closed하고 synthetic profile만 지원한다. Claude에는 shell/Git 도구를 주지 않고, OS sandbox와 사후 manifest 검증으로 `poc/simulator/src`, `tests`, `config` 변경만 허용한다. 서버가 network-deny Python sandbox에서 고정 테스트를 실행하고 전체 파일 manifest digest를 다시 계산한다. 두 번째 승인 뒤 deterministic publisher가 Commit하며 Push는 기본 비활성이다.
 - Zen 무료 모델은 외부·미국 처리 경로이며 데이터 보존·모델 개선 조건이 적용될 수 있다. 회사 요청, 코드, Wiki, 경로, 실제 성능 수치, 식별자와 secret은 UI에도 입력하지 않는다.
-- 실제 사내 source를 연결하기 전 전용 OS identity 또는 container, 사내 OpenCode/LLM endpoint, SSO, service credential, Unix socket/mTLS와 egress deny 정책으로 교체해야 한다. 이 예외는 회사 데이터나 production 승인으로 간주하지 않는다.
+- 실제 사내 source를 연결하기 전 전용 OS identity 또는 rootless container, 사내 OpenCode/LLM endpoint, SSO, service credential, Unix socket/mTLS, 저장물 TTL/암호화와 egress deny 정책으로 교체해야 한다. 이 예외는 회사 데이터나 production 승인으로 간주하지 않는다.
 
 ## 5. 원문 비반출 처리 모델
 
@@ -273,7 +274,9 @@ AI Office는 사내 SSD/UFS 시뮬레이터의 코드, 설계 문서, 성능 데
 | 프레임워크 전문가 | R-Scoped | W-영향 분석 | P | X | read-only code index | checkout 쓰기, build 실행, shell/network |
 | 견적 분석가 | X | R/W-Scoped | P | X | 산정 도구만 | source 원문, 외부 전송 |
 | 테스트 설계자 | 필요 시 R-Scoped | R/W-계획 | P | X | test catalog 읽기 | production 실행, 실제 성능 trace 반출 |
-| 레포 매니저 | X | R-승인 후보 | P-issue | 승인 후 간접 | Git adapter 요청만 | 직접 token, code/PR/merge, 승인 변경 |
+| 레포 매니저 | X | R-승인 후보 | P-issue | 승인 후 간접 | Git adapter 요청만 | 직접 token, 승인 변경, merge/delete |
+| Claude coding runtime | 승인 패킷만 | W-업무 worktree | X | X | read/edit/write/glob/grep | shell, network, Git, allowlist 밖 쓰기 |
+| Git publisher | X | R-승인된 Diff digest | X | W-업무 branch commit, 선택 push | 고정 Git argv만 | 모델 호출, merge, force-push, 경로 변경 |
 | 보안 검토관 | 필요 시 R-감사 목적 | R | A/차단 | X | policy, audit, kill switch | 산출물 내용 수정, 자체 예외 승인 |
 | Internal Connector | R-Scoped | W-내부 | P-반출 후보 | X | source별 read-only adapter | 인터넷 임의 접속, Git credential |
 | Egress PEP/DLP | 검사 시 R | 검사 | A/차단 | X | allowlist destination만 | content 생성, 정책 우회 |
@@ -299,7 +302,7 @@ Wiki, source comment, Git issue, log와 사용자 입력은 모두 비신뢰 데
 - retrieval 결과를 `UNTRUSTED_DATA` typed field에 넣고 system instruction이나 tool schema와 결합하지 않는다.
 - source content가 요청한 URL fetch, tool call, 권한 상승, 정책 변경과 데이터 전송을 실행하지 않는다.
 - 외부 제어면이 보낸 job도 비신뢰 입력이다. 서명은 발신자를 확인할 뿐 내용의 안전성을 보장하지 않는다.
-- 모델 출력은 설명 또는 typed action proposal로만 취급한다. 모델이 직접 shell, HTTP, SQL, Git 또는 filesystem에 연결되지 않는다.
+- 분석 모델 출력은 설명 또는 typed action proposal로만 취급한다. coding runtime만 승인된 worktree의 allowlist 파일 도구를 받고 shell, HTTP, SQL, Git credential은 받지 않는다.
 
 ### 9.2 결정론적 도구 게이트
 
@@ -319,7 +322,7 @@ Wiki, source comment, Git issue, log와 사용자 입력은 모두 비신뢰 데
 
 ### 9.3 위험한 기능의 기본값
 
-- arbitrary shell, code execution, SQL, filesystem write와 arbitrary HTTP는 비활성화한다.
+- arbitrary shell, code execution, SQL과 arbitrary HTTP는 비활성화한다. filesystem write는 승인된 coding runtime의 업무 worktree와 경로 allowlist에만 연다.
 - 외부 URL browsing은 비활성화한다. 반드시 필요하면 별도 fetch proxy에서 scheme, hostname, resolved IP, redirect와 응답 크기를 검사해 SSRF를 차단한다.
 - 한 에이전트가 retrieval과 egress와 Git write 권한을 동시에 갖지 못하게 책임을 분리한다.
 - 반복 루프, fan-out과 대용량 retrieval에 budget을 적용한다. 초과 시 사람 확인 전까지 중지한다.
@@ -328,7 +331,7 @@ Wiki, source comment, Git issue, log와 사용자 입력은 모두 비신뢰 데
 
 ## 10. Git 쓰기 승인 게이트
 
-Git 어댑터는 사내에 둔다. 외부 제어면은 실제 내부 이슈 본문을 받거나 Git API를 직접 호출하지 않는다. 필요한 경우 외부의 일반화된 `issue_outline`을 사내에서 내부 근거와 결합해 실제 draft를 만든다.
+Git 어댑터는 사내에 둔다. 외부 제어면은 실제 내부 이슈 본문이나 Diff를 받거나 Git API를 직접 호출하지 않는다. 이슈 생성과 업무 branch Commit/Push는 각각 정확한 대상 repository, action, artifact digest와 사람 승인을 결합한다.
 
 ### 10.1 허용 상태 전이
 
@@ -352,8 +355,8 @@ DRAFT
 승인은 다음 값에 묶는다.
 
 - 승인자 identity와 최근 MFA 시각
-- exact repository ID와 `issue:create` action
-- canonical title/body/label/assignee의 content hash
+- exact repository ID와 `issue:create`, `branch:commit` 또는 `branch:push` action
+- canonical issue 본문 또는 base SHA·변경 파일·bounded Diff의 content hash
 - request ID, artifact ID와 policy version
 - 승인 사유, 생성 시각과 짧은 만료 시각
 - one-time nonce와 idempotency key
@@ -363,10 +366,10 @@ DRAFT
 ### 10.3 Git credential과 실행 제한
 
 - 장기 PAT 대신 repository 단위의 짧은 수명 Git App/OIDC token을 사용한다.
-- token scope는 issue create와 승인된 label allowlist에 한정한다.
+- token scope는 배포 단계에 따라 issue create 또는 승인된 업무 branch push에 한정한다.
 - adapter runtime에는 source checkout, SSH key, package manager, shell과 일반 인터넷 egress를 두지 않는다.
 - API request에는 idempotency key를 사용한다. timeout 뒤 재시도 전 Git에서 동일 키를 조회해 중복 생성을 막는다.
-- 초기에는 issue comment, attachment, edit, close, delete, project board 변경을 모두 거부한다.
+- 초기에는 issue comment/edit/delete, main 직접 push, force-push, merge, tag와 release를 모두 거부한다.
 - 실제 Git 응답이 승인 hash와 맞지 않으면 kill switch를 작동시키고 reconciliation queue로 보낸다.
 
 ## 11. Secret, key와 암호화
@@ -477,7 +480,7 @@ DRAFT
 - [ ] SSD/UFS 코드, 설계, 성능, debug, PII와 secret의 등급 및 예시를 데이터 소유자가 승인했다.
 - [ ] 허용 목적, 금지 목적, 보존 기간, 외부 provider와 지역을 문서화했다.
 - [ ] `EXPORT-SANITIZED` field allowlist와 type별 변환 정책을 schema로 고정했다.
-- [ ] code/PR/merge 등 이슈 생성 이외의 Git write가 범위 밖임을 합의했다.
+- [ ] 허용 Git 동작이 이슈 생성과 승인된 업무 branch Commit/선택 Push로 한정되고 main 직접 쓰기·force-push·merge가 금지됨을 합의했다.
 - [ ] 보안 예외의 승인자, 만료, 재검토와 폐기 절차를 정했다.
 
 ### 16.2 아키텍처와 기반 통제
@@ -494,11 +497,11 @@ DRAFT
 ### 16.3 애플리케이션 통제
 
 - [ ] 모든 retrieval/tool/egress/Git 경로가 중앙 PEP를 호출하며 우회 경로가 없다.
-- [ ] 모델에는 직접 shell, HTTP, filesystem write, SQL 또는 Git credential이 없다.
+- [ ] 분석 모델에는 write 권한이 없고, coding runtime에는 업무 worktree allowlist만 있으며 shell/HTTP/SQL/Git credential이 없다.
 - [ ] project별 index/cache/sandbox와 source ACL 동기화를 검증했다.
 - [ ] unknown field reject, payload 제한, canonicalization과 KMS 서명을 구현했다.
 - [ ] secret/PII/code/log/path/performance/codename detector와 semantic DLP를 사내에 배포했다.
-- [ ] Git approval이 exact hash, repository, action, approver, TTL과 one-time nonce에 결합된다.
+- [ ] 코딩/Git approval이 exact artifact hash, version, repository, action, approver와 idempotency key에 결합된다.
 - [ ] audit event가 원문 없이 모든 정책 결정과 상태 전이를 재현한다.
 - [ ] `EGRESS_OFF`, `GIT_WRITE_OFF`, per-agent revoke와 `GLOBAL_STOP`이 애플리케이션 밖에서도 작동한다.
 
@@ -508,7 +511,7 @@ DRAFT
 - [ ] path traversal, SSRF, arbitrary URL, cross-project retrieval와 capability escalation을 거부한다.
 - [ ] 합성 secret, source code, 내부 URL, 성능 table, Unicode/base64/split-message canary를 모두 차단한다.
 - [ ] 외부로 나가는 실제 network capture에 C2/C3/C4, source locator와 원문이 없다.
-- [ ] draft 변경, approval 만료, replay, adapter timeout과 중복 요청이 Git issue를 만들지 않거나 정확히 한 건만 만든다.
+- [ ] 분석/Diff 변경, stale version, replay, adapter timeout과 중복 요청이 승인 우회나 중복 Commit/Push를 만들지 않는다.
 - [ ] policy/DLP/audit/Vault/provider 장애에서 fail-closed로 동작한다.
 - [ ] kill switch가 진행 중 queue와 credential까지 차단하며 복구 후 자동 재개하지 않는다.
 - [ ] 공급망 취약점 검사와 container/model provenance 검증을 통과했다.
@@ -521,6 +524,7 @@ DRAFT
 4. **Sanitized control plane**: 승인된 envelope만 외부 제어면에 보내며 Git write는 끈다.
 5. **Issue draft**: 실제 이슈를 사내에서 생성하되 사람이 Git UI에 직접 등록한다.
 6. **Approved issue create**: 낮은 위험 repository부터 hash-bound 승인 후 adapter가 한 건씩 생성한다.
+7. **Approved worktree coding**: 낮은 위험 합성/샌드박스 repository부터 별도 coding·Git 승인으로 업무 branch에만 반영한다.
 
 다음 단계로 가기 전에 누출 0건, 승인 우회 0건, 설명되지 않은 outbound 0건과 감사 누락 0건을 확인한다. 자동 범위 확대는 편의가 아니라 새 보안 변경으로 검토한다.
 

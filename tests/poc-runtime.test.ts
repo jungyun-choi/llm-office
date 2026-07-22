@@ -166,11 +166,14 @@ test("single-flight reuses identical idempotency and rejects conflicts", async (
   assert.equal(calls, 1);
 });
 
-test("local runtime is opt-in and production is always denied", () => {
+test("local runtime is opt-in and production permits only acknowledged internal OpenCode", () => {
   const previous = {
     nodeEnv: process.env.NODE_ENV,
     enabled: process.env.AI_OFFICE_LOCAL_RUNNER_ENABLED,
     runtime: process.env.AI_OFFICE_AGENT_RUNTIME,
+    profile: process.env.AI_OFFICE_OPENCODE_PROFILE,
+    deploymentMode: process.env.AI_OFFICE_DEPLOYMENT_MODE,
+    executionAck: process.env.AI_OFFICE_INTERNAL_EXECUTION_ACK,
   };
   try {
     delete process.env.AI_OFFICE_LOCAL_RUNNER_ENABLED;
@@ -182,10 +185,20 @@ test("local runtime is opt-in and production is always denied", () => {
     assert.equal(isLocalRunnerEnabled(), true);
     Reflect.set(process.env, "NODE_ENV", "production");
     assert.equal(isLocalRunnerEnabled(), false);
+    process.env.AI_OFFICE_AGENT_RUNTIME = "opencode";
+    process.env.AI_OFFICE_OPENCODE_PROFILE = "internal";
+    process.env.AI_OFFICE_DEPLOYMENT_MODE = "internal";
+    process.env.AI_OFFICE_INTERNAL_EXECUTION_ACK = "on-prem-only";
+    assert.equal(isLocalRunnerEnabled(), true);
+    process.env.AI_OFFICE_OPENCODE_PROFILE = "zen";
+    assert.equal(isLocalRunnerEnabled(), false);
   } finally {
     restoreEnvironment("NODE_ENV", previous.nodeEnv);
     restoreEnvironment("AI_OFFICE_LOCAL_RUNNER_ENABLED", previous.enabled);
     restoreEnvironment("AI_OFFICE_AGENT_RUNTIME", previous.runtime);
+    restoreEnvironment("AI_OFFICE_OPENCODE_PROFILE", previous.profile);
+    restoreEnvironment("AI_OFFICE_DEPLOYMENT_MODE", previous.deploymentMode);
+    restoreEnvironment("AI_OFFICE_INTERNAL_EXECUTION_ACK", previous.executionAck);
   }
 });
 
@@ -234,6 +247,7 @@ test("same-origin proxy keeps the bridge token server-side", async () => {
   const previousEnvironment = captureEnvironment([
     "NODE_ENV",
     "AI_OFFICE_LOCAL_PROXY_ENABLED",
+    "AI_OFFICE_BRIDGE_TOKEN",
   ]);
   const originalFetch = globalThis.fetch;
   const bridgeToken = "a".repeat(43);
@@ -242,7 +256,6 @@ test("same-origin proxy keeps the bridge token server-side", async () => {
   const capabilities = {
     apiVersion: "v1",
     environment: "local",
-    bridgeToken,
     agentRuntime: {
       enabled: true,
       available: true,
@@ -262,9 +275,21 @@ test("same-origin proxy keeps the bridge token server-side", async () => {
     Reflect.set(process.env, "NODE_ENV", "development");
     process.env.AI_OFFICE_LOCAL_PROXY_ENABLED = "1";
     assert.equal(isLocalPocProxyEnabled(), true);
+    delete process.env.AI_OFFICE_BRIDGE_TOKEN;
+    const missingTokenResponse = await proxyLocalPocCapabilities();
+    assert.equal(missingTokenResponse.status, 503);
+    assert.equal(
+      (await missingTokenResponse.json() as { error: { code: string } }).error.code,
+      "BRIDGE_TOKEN_MISSING",
+    );
+    process.env.AI_OFFICE_BRIDGE_TOKEN = bridgeToken;
     globalThis.fetch = async (input, init) => {
       const url = String(input);
       if (url.endsWith("/capabilities")) {
+        assert.equal(
+          new Headers(init?.headers).get("x-ai-office-bridge-token"),
+          bridgeToken,
+        );
         capabilityCalls += 1;
         if (capabilityCalls === 1) {
           throw new TypeError("bridge is still starting");
@@ -716,13 +741,22 @@ test("bridge source enforces loopback, rejects browser origins, and requires tok
     new URL("../scripts/poc-bridge.ts", import.meta.url),
     "utf8",
   );
+  const launcherSource = await readFile(
+    new URL("../scripts/dev-office.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /const HOST = "127\.0\.0\.1"/);
   assert.match(source, /if \(origin\)/);
   assert.match(source, /bridgeError\("ORIGIN_DENIED", 403\)/);
   assert.doesNotMatch(source, /access-control-allow-origin/iu);
   assert.match(source, /isLoopbackRequest\(request\)/);
   assert.match(source, /isAllowedHost\(request\.headers\.host\)/);
-  assert.match(source, /randomBytes\(32\)\.toString\("base64url"\)/);
+  assert.match(source, /process\.env\.AI_OFFICE_BRIDGE_TOKEN/);
+  assert.match(source, /BRIDGE_TOKEN_PATTERN/);
+  assert.doesNotMatch(source, /randomBytes/);
+  assert.doesNotMatch(source, /localCapabilities\(BRIDGE_TOKEN\)/);
+  assert.match(launcherSource, /randomBytes\(32\)\.toString\("base64url"\)/);
+  assert.match(launcherSource, /AI_OFFICE_BRIDGE_TOKEN/);
   assert.match(source, /timingSafeEqual\(expectedBytes, candidateBytes\)/);
   assert.match(source, /x-ai-office-bridge-token/);
   assert.match(source, /MAX_BODY_BYTES = 8 \* 1_024/);

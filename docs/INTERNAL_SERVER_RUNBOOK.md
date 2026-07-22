@@ -1,119 +1,170 @@
-# 사내 개인 Linux 서버 운영 가이드
+# 사내 개인 서버 운영 가이드
 
-이 문서는 현재 저장소 그대로 실행 가능한 **합성 POC**와, 아직 구현이 필요한 **회사 데이터 연동판**을 구분한다. 예시는 전용 OS 계정 `ai-office`, 설치 경로 `/srv/ai-office/current`, Node.js `22.13.0` 이상, systemd를 기준으로 한다.
+AI Office는 한 대의 서버에서 웹과 실행 브리지를 함께 운영한다. 프로세스는 두 개지만
+사용자에게는 하나의 웹 서비스로 보인다.
 
-## 먼저 확인할 현재 상태
+```text
+PC/모바일 브라우저
+  → Vinext 웹 :3000
+  → same-origin /api/v1/jobs
+  → loopback bridge 127.0.0.1:4317
+  → SQLite FIFO → OpenCode 분석 → 승인 → Claude 코딩 → 테스트 → 승인 → Git
+```
 
-| 경로 | 지금 실행 가능 | 웹/실행기 | 데이터와 대기열 |
-|---|---:|---|---|
-| A. 합성 POC | 예 | `dev:poc` 웹 + `127.0.0.1:4317` Zen bridge | 합성 저장소만 사용. 큐·히스토리는 브라우저별 `localStorage`(실행/대기 10건, 완료/실패 20건) |
-| B. 회사 연동판 | 아니요 | 향후 production 웹 + 회사 runtime/worker | `InternalSimulatorSource`와 서버 영속 FIFO가 아직 연결되지 않음 |
+브라우저는 OpenCode/Claude/Git을 직접 호출하지 않으며 bridge token과 모델 credential을
+받지 않는다. `4317` 포트는 서버 밖에 절대 열지 않는다.
 
-현재 `npm run start`는 production 웹을 띄우지만 로컬 bridge proxy를 의도적으로 비활성화한다. 따라서 경로 A는 `npm run dev:poc`를 사용해야 한다. 또한 현재 `poc:bridge:opencode-internal`은 **로컬 Ollama provider만 허용**하고 여전히 `SyntheticSimulatorSource`를 사용한다. 회사 endpoint나 실제 저장소가 연결됐다는 뜻이 아니다.
+## 1. 가장 빠른 합성 POC
 
-현재 별도 범용 backend 앱은 없다. 웹 프로세스 안의 same-origin API와 별도 OpenCode
-bridge가 backend 역할을 나누므로, 합성 POC에서는 아래 두 프로세스만 실행한다.
+요구 사항:
 
-## 가장 빠른 수동 실행
+- Node.js 22.13 이상
+- `npm ci` 완료
+- OpenCode 1.4.3과 사용할 Zen 모델
+- Claude Code CLI
+- Git과 Python 3
+- Claude 코딩까지 시험할 때는 macOS와 `/usr/bin/sandbox-exec`
 
 ```bash
 cd /srv/ai-office/current
 npm ci
-
-# 터미널 1: 합성 데이터 전용 OpenCode Zen bridge
-npm run poc:bridge
-
-# 터미널 2: 같은 서버의 인증 reverse proxy 뒤에서 실행
-npm run dev:poc -- -H 127.0.0.1 -p 3000
+npm run build
+npm run dev:office -- -H 127.0.0.1 -p 3000
 ```
 
-개인 tailnet에서 소유자 단말만 ACL로 허용했다면 두 번째 명령의 host만 서버의 정확한
-Tailscale IPv4로 바꾼다. 회사 자료는 아직 입력하지 않는다.
-
-## A. 현재 합성 POC 실행
-
-회사 요청, 코드, Wiki, 실제 성능 수치, 경로, 식별자를 입력하지 않는다. `npm run poc:bridge`는 외부 OpenCode Zen으로 합성 snapshot을 보내는 예외 경로다. 회사 정책이 외부 AI egress를 금지하면 이 경로도 실행하지 않는다.
-
-### 1. 설치와 사전 검증
-
-Node.js와 npm은 systemd에서도 보이는 시스템 경로에 설치하는 편이 안전하다. OpenCode는 저장소가 검증하는 정확한 버전 `1.4.3`을 전용 서비스 계정 소유 파일로 설치한다.
-checkout과 `npm ci`/build도 `ai-office` 계정으로 실행해 root 소유 `node_modules`나 build 산출물이 생기지 않게 한다.
+같은 개인 tailnet의 모바일에서 직접 볼 때만 `127.0.0.1` 대신 서버의 정확한 Tailscale
+IPv4를 사용한다. 공유 사내망에서는 웹도 loopback에 두고 SSO/MFA reverse proxy를 앞에 둔다.
 
 ```bash
-sudo install -d -o ai-office -g ai-office -m 0700 /var/lib/ai-office
-sudo -u ai-office -H node --version                 # v22.13.0 이상
-sudo -u ai-office -H npm --version
-sudo -u ai-office -H npm --prefix /srv/ai-office/current ci
-sudo -u ai-office -H npm --prefix /srv/ai-office/current run build
-# vinext와 tsx가 devDependency이므로 npm ci에 --omit=dev 금지
-# build는 배포 전 검증이며 bridge 연결 실행은 아래 dev:poc 사용
-
-sudo -u ai-office -H /var/lib/ai-office/.opencode/bin/opencode --version
-# 정확히 1.4.3이어야 함
-sudo -u ai-office env \
-  HOME=/var/lib/ai-office \
-  XDG_CONFIG_HOME=/var/lib/ai-office/.config \
-  XDG_DATA_HOME=/var/lib/ai-office/.local/share \
-  XDG_CACHE_HOME=/var/lib/ai-office/.cache \
-  /var/lib/ai-office/.opencode/bin/opencode models opencode
-
-sudo -u ai-office test -r /var/lib/ai-office/.cache/opencode/models.json
-stat -c '%U %G %a %n' /var/lib/ai-office/.cache/opencode/models.json
+npm run dev:office -- -H "$(tailscale ip -4)" -p 3000
 ```
 
-마지막 명령은 Zen model catalog를 갱신한다. catalog는 7일보다 오래되면 bridge가 unavailable로 닫힌다. OpenCode 실행 파일은 `ai-office` 계정 소유이고 group/world writable이 아니어야 한다.
-catalog도 `ai-office` 소유이며 group/world writable이 아니어야 한다.
+`dev:office`는 다음 두 프로세스를 함께 시작하고 종료 신호도 함께 전달한다.
 
-### 2. 환경 파일
+- `poc:bridge:office`: OpenCode Zen 분석, SQLite 큐, Claude/Git worker
+- `dev:poc`: 웹과 same-origin loopback proxy
 
-비밀값과 사내 endpoint는 Git 저장소나 unit 파일에 넣지 않는다. systemd가 root로 읽는 별도 파일을 만든다.
+합성 profile은 사용자의 원문 대신 서버 소유 합성 시나리오를 외부 모델에 보낸다. 그래도
+회사 요청, 코드, 문서, 경로, 성능 수치, 식별자나 비밀값은 입력하지 않는다.
 
-```bash
-sudo install -d -m 0750 /etc/ai-office
-sudo touch /etc/ai-office/web.env /etc/ai-office/bridge.env
-sudo chown root:root /etc/ai-office/web.env /etc/ai-office/bridge.env
-sudo chmod 0600 /etc/ai-office/web.env /etc/ai-office/bridge.env
-```
+## 2. 화면에서 검증할 흐름
 
-`touch`는 기존 환경 파일 내용을 지우지 않는다. 아래 예시는 최초 작성 시에만 편집하고,
-운영 중에는 회사 secret manager 또는 승인된 변경 절차로 갱신한다.
+1. 요청을 여러 건 등록하면 SQLite FIFO에 순서대로 남는다.
+2. OpenCode 분석실이 한 건을 처리하고 `awaiting_coding_approval`에서 멈춘다.
+3. 분석 패킷을 확인하고 **Claude에게 구현 맡기기**를 누른다.
+4. Claude는 `ai-office/<job-id>` 브랜치의 전용 worktree에서만 수정한다.
+5. 서버가 고정된 Python 테스트를 실행하고 `changes_ready`에서 멈춘다.
+6. 변경 파일, Diff, 테스트 결과를 확인하고 **Commit 승인**을 누른다.
+7. Push까지 켠 경우에만 **Commit + Push 승인**이 별도로 보인다.
 
-`/etc/ai-office/web.env`:
+업무와 이벤트 히스토리는 기본적으로 `~/.ai-office/jobs.sqlite`에 남는다. worktree는
+`~/.ai-office/worktrees`에 생성된다. 이 디렉터리는 서비스 계정만 읽을 수 있게 `0700`,
+DB는 `0600`으로 생성된다.
+
+## 3. POC 환경 변수
+
+`npm run dev:office`는 bridge token을 실행 시 한 번 생성해 두 child process에만 전달한다.
+필요할 때만 아래 값을 덮어쓴다.
 
 ```dotenv
-AI_OFFICE_WEB_HOST=127.0.0.1
-AI_OFFICE_WEB_PORT=3000
-AI_OFFICE_PUBLIC_ORIGIN=https://ai-office.example.internal
-```
-
-- reverse proxy를 쓰면 `127.0.0.1`을 유지한다.
-- 직접 tailnet에 열 때만 `AI_OFFICE_WEB_HOST`를 서버의 **정확한 Tailscale IPv4**로 바꾼다. `0.0.0.0`은 사용하지 않는다.
-- `AI_OFFICE_PUBLIC_ORIGIN`은 HTTPS origin 또는 loopback HTTP만 허용한다. 직접 Tailscale IP의 HTTP 주소에서는 생략해도 앱 실행에는 영향이 없고, 소셜 메타데이터만 기본값을 사용한다.
-
-`/etc/ai-office/bridge.env`:
-
-```dotenv
+AI_OFFICE_DATA_DIR=/var/lib/ai-office
 AI_OFFICE_BRIDGE_PORT=4317
+AI_OFFICE_MAX_ACTIVE_JOBS=50
+
 AI_OFFICE_OPENCODE_BIN=/var/lib/ai-office/.opencode/bin/opencode
-AI_OFFICE_OPENCODE_HOME=/var/lib/ai-office
-XDG_CONFIG_HOME=/var/lib/ai-office/.config
-XDG_DATA_HOME=/var/lib/ai-office/.local/share
-XDG_CACHE_HOME=/var/lib/ai-office/.cache
 AI_OFFICE_OPENCODE_MODEL=opencode/deepseek-v4-flash-free
 AI_OFFICE_AGENT_TIMEOUT_MS=120000
+
+AI_OFFICE_CLAUDE_BIN=/usr/local/bin/claude
+AI_OFFICE_CLAUDE_MODEL=sonnet
+AI_OFFICE_CLAUDE_TIMEOUT_MS=300000
+
+# 기본값과 동일한 합성 저장소 최소 경계
+AI_OFFICE_CODING_REPO=/srv/ai-office/current
+AI_OFFICE_CODING_ALLOWED_PATHS=poc/simulator/src,poc/simulator/tests,poc/simulator/config
+
+# 기본은 0. 합성 저장소에서 원격 브랜치까지 시험할 때만 1.
+AI_OFFICE_GIT_PUSH_ENABLED=0
 ```
 
-`AI_OFFICE_BRIDGE_PORT`는 바꾸지 않는다. 웹 프록시가 `127.0.0.1:4317`로 고정돼 있고 bridge 자체도 항상 loopback에 bind한다. 토큰이나 provider credential이 필요해지면 같은 `0600` 파일 또는 회사 secret manager에서 주입한다.
+실행 파일 경로와 repository 경로는 절대 경로만 허용한다. 모델 ID와 허용 경로는 서버가
+검증하고, 사용자가 입력한 임의 문자열을 shell 명령으로 사용하지 않는다.
 
-### 3. systemd 두 프로세스
+번들 `LocalJobExecutor`는 synthetic 저장소와 macOS sandbox 전용이다. Linux 서버 또는 실제
+회사 simulator에서는 분석 큐와 UI는 그대로 쓰되, Claude·테스트·Git 실행을 승인된 rootless
+container 기반 `JobExecutionPort`로 교체하기 전까지 coding capability가 fail-closed하는 것이
+정상이다.
 
-아래 `/usr/bin/npm`은 서버의 `command -v npm` 결과와 다르면 교체한다.
+## 4. 회사 OpenCode/Claude로 교체
+
+회사 자료를 열기 전에 다음을 모두 확인한다.
+
+- 외부 Zen/Codex fallback이 꺼져 있다.
+- OpenCode와 Claude가 회사 승인 endpoint/model만 사용한다.
+- 회사 모델의 입력·출력 보존과 학습 정책이 승인되었다.
+- 서버 egress가 회사 endpoint와 필요한 Git 원격으로 제한되었다.
+- 웹은 회사 SSO/MFA reverse proxy 뒤에 있다.
+- 실행 OS 계정은 simulator 저장소와 전용 데이터 디렉터리에만 필요한 권한을 가진다.
+
+회사 profile의 최소 환경 예시는 다음과 같다.
+
+```dotenv
+NODE_ENV=production
+AI_OFFICE_LOCAL_PROXY_ENABLED=1
+AI_OFFICE_LOCAL_RUNNER_ENABLED=1
+AI_OFFICE_DEPLOYMENT_MODE=internal
+AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only
+AI_OFFICE_BRIDGE_TOKEN=<웹과-bridge가-공유하는-64자리-hex-난수>
+
+AI_OFFICE_AGENT_RUNTIME=opencode
+AI_OFFICE_OPENCODE_PROFILE=company
+AI_OFFICE_OPENCODE_BIN=/opt/company/bin/opencode
+AI_OFFICE_OPENCODE_MODEL=company/CodeLLMPro
+
+AI_OFFICE_CODING_ENABLED=1
+AI_OFFICE_CLAUDE_PROFILE=internal
+AI_OFFICE_CLAUDE_BIN=/opt/company/bin/claude
+AI_OFFICE_CLAUDE_MODEL=company-code-model
+AI_OFFICE_CODING_REPO=/srv/simulator
+AI_OFFICE_CODING_ALLOWED_PATHS=common,FTL,FIL,HIL,tests
+
+AI_OFFICE_DATA_DIR=/var/lib/ai-office
+AI_OFFICE_GIT_PUSH_ENABLED=0
+```
+
+`AI_OFFICE_DEPLOYMENT_MODE`와 `AI_OFFICE_INTERNAL_EXECUTION_ACK`는 production에서 CLI
+실행을 여는 이중 확인이다. 둘 중 하나라도 없으면 proxy/coding은 닫혀야 한다. 실제 회사
+경로는 예시와 다를 수 있으므로 먼저 repository를 조사해 allowlist를 정확히 설정한다.
+
+현재 공개 저장소의 OpenCode 설정은 `internal|zen`만, 번들 coding executor는
+`synthetic`만 지원한다. 따라서 위 `company` 분석 profile과 `internal` coding profile은
+사내 `SequentialTurnExecutor`, `InternalSimulatorSource`, rootless-container
+`JobExecutionPort`가 연결된 branch에서만 활성화한다. 공개 골격만 Linux 서버에 올리면
+회사 adapter를 추측해 실행하지 않고 fail-closed하는 것이 정상이다.
+
+현재 합성 분석 source는 `SyntheticSimulatorSource`다. `.LLM`, DLD, TopView와 실제 코드
+근거를 사용하려면 [Claude 사내 연동 인계서](./CLAUDE_COMPANY_INTEGRATION.md)에 따라
+`InternalSimulatorSource`와 회사 OpenCode adapter를 연결한다. UI와 `/api/v1/jobs` 상태
+계약은 유지한다.
+
+## 5. systemd 예시
+
+비밀값은 Git이나 unit 본문에 넣지 말고 root 소유 `0600` 환경 파일에 둔다. 다음처럼 token을
+한 번 만들고 같은 값을 `bridge.env`와 `web.env` 양쪽에 넣는다.
+
+```bash
+openssl rand -hex 32
+```
+
+```dotenv
+AI_OFFICE_BRIDGE_TOKEN=<위에서-만든-64자리-hex>
+```
 
 `/etc/systemd/system/ai-office-bridge.service`:
 
 ```ini
 [Unit]
-Description=AI Office synthetic POC loopback bridge
+Description=AI Office loopback execution bridge
 After=network-online.target
 Wants=network-online.target
 
@@ -123,14 +174,12 @@ User=ai-office
 Group=ai-office
 WorkingDirectory=/srv/ai-office/current
 EnvironmentFile=/etc/ai-office/bridge.env
-ExecStart=/usr/bin/npm run poc:bridge
+ExecStart=/usr/bin/npm run poc:bridge:internal
 Restart=on-failure
 RestartSec=5s
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
-ProtectHome=true
 
 [Install]
 WantedBy=multi-user.target
@@ -140,9 +189,9 @@ WantedBy=multi-user.target
 
 ```ini
 [Unit]
-Description=AI Office synthetic POC web
-After=network-online.target ai-office-bridge.service
-Wants=network-online.target ai-office-bridge.service
+Description=AI Office web
+After=ai-office-bridge.service
+Wants=ai-office-bridge.service
 
 [Service]
 Type=simple
@@ -150,18 +199,20 @@ User=ai-office
 Group=ai-office
 WorkingDirectory=/srv/ai-office/current
 EnvironmentFile=/etc/ai-office/web.env
-ExecStart=/usr/bin/npm run dev:poc -- -H ${AI_OFFICE_WEB_HOST} -p ${AI_OFFICE_WEB_PORT}
+ExecStart=/usr/bin/npm run dev:poc -- -H 127.0.0.1 -p 3000
 Restart=on-failure
 RestartSec=5s
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
-ProtectHome=true
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+회사 production에서는 build/start 구성을 배포 환경에 맞게 검증하고, bridge token과
+production 이중 확인 변수를 웹과 bridge 양쪽에 동일하게 공급한다. token은 capability 또는
+브라우저 응답으로 조회할 수 없으며 누락되면 서버가 시작/중계를 거부한다.
 
 ```bash
 sudo systemctl daemon-reload
@@ -169,77 +220,44 @@ sudo systemctl enable --now ai-office-bridge.service ai-office-web.service
 sudo systemctl status ai-office-bridge.service ai-office-web.service
 ```
 
-### 4. 네트워크와 health check
-
-현재 웹 UI와 `/api/v1/poc/*`에는 애플리케이션 로그인 기능이 없다. 따라서 다음 조건을
-만족하지 않는 사내망이나 공유 tailnet에 웹 포트를 직접 노출하면 안 된다.
-
-권장 노출 방식은 다음 둘 중 하나다.
-
-1. **단일 사용자 POC만**: 소유자 단말만 가입된 개인 tailnet에서 웹을 정확한 Tailscale
-   IP에 bind하고, tailnet ACL과 호스트 방화벽이 그 단말만 `3000/tcp`에 허용할 때 사용한다.
-2. **공유 tailnet 또는 사내망**: 웹을 `127.0.0.1:3000`에 유지한다. HTTPS reverse proxy가
-   `/`와 `/api/v1/poc/*` 전체에 회사 SSO/MFA를 적용한 뒤에만 외부에 노출한다.
-
-`dev:poc`는 장기 production 서버가 아니라 개인 합성 POC용이다. 여러 사용자가 쓰거나 회사
-자료를 처리하기 전에는 B 경로의 인증된 production 웹과 서버 영속 backend를 먼저 구현한다.
-
-어느 경우든 `4317/tcp`는 방화벽에서 열지 않는다. 다음 결과에서 `4317`은 `127.0.0.1`에만, 웹 `3000`은 선택한 주소에만 떠야 한다.
+## 6. 상태 확인과 운영
 
 ```bash
-sudo ss -ltnp | grep -E ':(3000|4317)\b'
+# 4317은 loopback에만, 3000은 의도한 주소에만 떠야 한다.
+ss -ltnp | grep -E ':(3000|4317)\b'
 
-# bridge token을 출력하지 않는 loopback 검사
-curl -fsS http://127.0.0.1:4317/api/v1/poc/capabilities \
-  | jq -e '{apiVersion, environment, agentRuntime, dataPolicy}'
+# 브라우저가 호출하는 same-origin 기능 확인
+curl -fsS http://127.0.0.1:3000/api/v1/jobs/capabilities
 
-# reverse proxy/loopback 구성 예시
-curl -fsS http://127.0.0.1:3000/api/v1/poc/capabilities \
-  | jq -e '.environment == "local" and .agentRuntime.enabled == true and .agentRuntime.available == true'
-```
+# 대기열과 히스토리 확인
+curl -fsS 'http://127.0.0.1:3000/api/v1/jobs?limit=10&offset=0'
 
-마지막 검사가 `true`이면 웹 → same-origin API → loopback bridge가 연결된 상태다. 실제 접속 주소에서도 `/api/v1/poc/capabilities`와 합성 요청 1건을 확인한다.
-
-### 5. 로그, 재시작, 업데이트와 rollback
-
-```bash
 journalctl -u ai-office-web.service -u ai-office-bridge.service -f
-sudo systemctl restart ai-office-bridge.service ai-office-web.service
 ```
 
-업데이트는 승인된 commit을 새 release 디렉터리에 checkout하고 그 안에서 `npm ci`, `npm run build`, health 검증을 끝낸 다음 `/srv/ai-office/current` symlink를 원자적으로 바꾸고 두 서비스를 재시작한다. 이전 release 디렉터리는 즉시 지우지 않는다. 장애 시 symlink를 이전 release로 되돌리고 같은 두 서비스를 재시작한다. 최소한 아래 값은 배포 기록에 남긴다.
+capabilities에서 확인할 값:
 
-```bash
-git -C /srv/ai-office/current rev-parse HEAD
-node --version
-/var/lib/ai-office/.opencode/bin/opencode --version
-```
+- `queue.persistent=true`, `queue.storage=sqlite`, `queue.maxActiveJobs=50`(기본 대기열 상한)
+- `analysis.available=true`
+- `coding.enabled=true`, `coding.available=true`
+- 합성 POC에서는 `dataPolicy.syntheticOnly=true`
+- 기본값은 `publishing.pushEnabled=false`
 
-## B. 향후 회사 OpenCode + InternalSimulatorSource
-
-이 경로는 현재 배포 절차가 아니라 **구현 완료 전 차단 목록**이다. 지금 코드에는 `InternalRepoSource` 골격이 있지만 `PocRunService`가 `SyntheticSimulatorSource`를 직접 생성한다. `config/agents.example.yaml`과 `config/opencode.company.example.json`도 예시일 뿐 런타임에 연결되지 않았다. 서버 영속 job API, database/queue worker, 다중 사용자 인증·감사도 아직 없다.
-
-실제 회사 자료를 열기 전에 다음을 모두 구현·검증한다.
-
-- `InternalSimulatorSource`를 승인된 read-only root allowlist와 최소 snapshot 생성 로직에 연결한다.
-- 외부 Zen fallback을 제거하고, 회사가 승인한 OpenCode endpoint/provider/model만 서버 allowlist로 검증한다. 현재 internal profile의 Ollama 전용 제한도 회사 profile로 명시적으로 교체한다.
-- `config/agents.company.yaml`, `config/opencode.company.json`은 Git 밖의 `0600` 파일 또는 secret/config manager로 공급한다. endpoint credential은 문서나 저장소에 기록하지 않는다.
-- 외부 provider egress를 기본 거부하고 회사 endpoint, Git/Wiki 등 승인 목적지만 허용한다. 회사 데이터에는 Zen/Codex 경로를 사용하지 않는다.
-- 브라우저 `localStorage` 큐를 `POST /api/v1/jobs` 기반 서버 영속 FIFO와 단일 worker로 교체한다. 재시작 복구, idempotency, 사용자/project 권한, 취소, pagination, 보존 기간, 안전한 agent error event를 구현한다.
-- 회사 SSO/MFA, `Cache-Control: no-store`, 감사 로그, 암호화 저장소와 사람 승인 전 Git publish 금지를 적용한다.
-
-이 구현이 끝나면 웹은 `npm run build` 후 `npm run start -- -H 127.0.0.1 -p 3000`으로 운영하고 reverse proxy 뒤에 둔다. durable worker/backend는 별도 systemd unit으로 실행해야 하지만, **현재 `package.json`에는 그 실행 script가 없으므로 지금 만들 수 있는 유효한 unit 명령도 없다.** 구현 시 실제 추가된 script와 health endpoint를 기준으로 이 문서를 갱신한다.
-
-## 문제 해결
+## 7. 장애 대응
 
 | 증상 | 확인할 것 |
 |---|---|
-| 웹은 뜨지만 deterministic demo만 보임 | `npm run start`를 쓴 것은 아닌지 확인. bridge 연결 POC는 `dev:poc`만 지원 |
-| `LOCAL_RUNNER_UNAVAILABLE` | bridge service 상태, OpenCode `1.4.3`, 실행 파일 소유권/권한, 7일 이내 model catalog 확인 |
-| 웹 capabilities가 `hosted` | web unit에 `dev:poc`가 아닌 `dev`/`start`를 썼거나 proxy flag가 빠짐 |
-| bridge 직접 호출이 403 | `127.0.0.1`에서 호출했는지, `Host`가 `127.0.0.1:4317` 또는 `localhost:4317`인지 확인 |
-| `EADDRINUSE` | `sudo ss -ltnp`로 3000/4317 점유 프로세스를 찾고 중복 unit 실행을 정리 |
-| systemd에서만 OpenCode unavailable | `AI_OFFICE_OPENCODE_BIN` 절대 경로, 서비스 계정 소유 여부, unit의 환경 파일 권한 확인 |
-| 재부팅 후 업무가 사라짐 | 현재 큐는 서버가 아니라 해당 브라우저의 `localStorage`; durable queue는 미구현 |
+| 화면이 서버 연결 실패 | 웹과 bridge 상태, `AI_OFFICE_LOCAL_PROXY_ENABLED=1`, 4317 중복 점유 |
+| `BRIDGE_TOKEN_MISSING` | 웹/bridge 환경 파일의 `AI_OFFICE_BRIDGE_TOKEN` 값과 권한, 두 값의 일치 여부 |
+| 분석 runtime unavailable | OpenCode 절대 경로·버전·model catalog·회사 provider 인증 |
+| Claude 승인 버튼 비활성 | `AI_OFFICE_CODING_ENABLED=1`, Claude 실행 파일과 profile 정책 |
+| 업무가 `failed` | 화면의 안전한 오류 code/stage, bridge 로그, 재시도 가능 여부 |
+| 테스트 실패 | 변경 Diff와 고정 테스트 출력 확인 후 수정 업무를 다시 요청 |
+| Commit은 됐지만 Push 실패 | job의 commit SHA 확인 후 credential/branch 권한을 고치고 재시도 |
+| 재시작 후 실행 중 업무 중단 | 안전하게 `failed`로 복구되며 retry; 대기 업무는 FIFO 유지 |
+| 디스크 증가 | 완료 worktree 보존 정책을 확인하고 승인된 정리 절차 사용 |
 
-회사 연동 설계와 보안 조건은 [Claude용 사내 연동 인계서](./CLAUDE_COMPANY_INTEGRATION.md), [아키텍처](./ARCHITECTURE.md), [보안 경계](./SECURITY.md)를 함께 따른다.
+앱 자체에는 아직 다중 사용자 인증이 없다. 개인 tailnet ACL 또는 SSO/MFA reverse proxy 없이
+공유망에 노출하지 않는다. 백업 시 `jobs.sqlite`뿐 아니라 WAL 파일도 일관된 SQLite 백업
+절차로 다룬다. 현재 POC는 업무 원문·결과·Diff와 worktree를 자동 만료시키지 않으므로 실제
+회사 자료를 열기 전에 보존 TTL, 암호화, 삭제·백업 정책과 정리 worker를 추가한다.

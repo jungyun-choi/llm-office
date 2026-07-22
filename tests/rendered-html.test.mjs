@@ -48,9 +48,11 @@ test("server-renders the AI Office floor", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="ko">/i);
   assert.match(html, /<title>AI Office \| 팀이 움직이는 디지털 사무실<\/title>/i);
-  assert.match(html, /팀이 움직이는 사무실/);
+  assert.match(html, /분석에서 코딩까지, 한 사무실에서/);
   assert.match(html, /오비트에게 요청/);
-  assert.match(html, /오케스트레이터/);
+  assert.match(html, /OpenCode 분석 사무실/);
+  assert.match(html, /검토 · 전달 데스크/);
+  assert.match(html, /Claude 개발 사무실/);
   assert.match(html, /DLD · 위키/);
   assert.match(html, /코드 · 프레임워크/);
   assert.match(html, /TopView · 영향\/견적/);
@@ -109,15 +111,19 @@ test("removes starter-only code and keeps interactive office wiring", async () =
   assert.match(layout, /OFFICE_COPY\.metadata/);
   assert.match(officeClient, /<OfficeFloor/);
   assert.match(officeClient, /<ResultDrawer/);
-  assert.match(officeFloor, /handoff-caption__mobile-details/);
-  assert.match(officeFloor, /activeWorkers\.map/);
+  assert.match(officeFloor, /<AnalysisOffice/);
+  assert.match(officeFloor, /<ReviewDispatchDesk/);
+  assert.match(officeFloor, /<ClaudeOffice/);
+  assert.match(officeFloor, /<TaskQueueHistory/);
   assert.match(officeFloor, /data-workflow-status/);
   assert.match(officeFloor, /className="sr-only" role="status" aria-live="polite"/);
-  assert.doesNotMatch(officeFloor, /className="handoff-caption" aria-live=/);
-  assert.match(workflow, /DEMO_WORKFLOW/);
+  assert.doesNotMatch(officeFloor, /handoff-caption__mobile-details/);
+  assert.match(workflow, /listOfficeJobs/);
+  assert.match(workflow, /createOfficeJob/);
+  assert.match(workflow, /runOfficeJobAction/);
+  assert.match(workflow, /ACTIVE_POLL_MS/);
   assert.match(workflow, /window\.clearTimeout/);
-  assert.match(workflow, /slice\(0, MAX_RESULTS\)/);
-  assert.match(workflow, /setIsResultArriving\(true\)/);
+  assert.doesNotMatch(workflow, /DEMO_WORKFLOW|localStorage/);
   assert.match(composer, /event\.metaKey \|\| event\.ctrlKey/);
   assert.match(drawer, /querySelectorAll<HTMLElement>/);
   assert.match(drawer, /activeElement === last/);
@@ -133,13 +139,15 @@ test("removes starter-only code and keeps interactive office wiring", async () =
     Number(reducedMotionDwell[1].replaceAll("_", "")) >= 1_500,
     "reduced-motion stages must remain readable",
   );
-  assert.match(styles, /\.handoff-caption__mobile-details/);
-  assert.match(styles, /\.agent-stations\s*\{[\s\S]*?order:\s*4;/);
+  assert.match(styles, /\.office-campus__grid/);
+  assert.match(styles, /\.analysis-agent-grid/);
+  assert.match(styles, /\.review-dispatch/);
+  assert.match(styles, /\.claude-station-grid/);
+  assert.match(styles, /\.agent-stage-progress/);
   assert.match(
     styles,
-    /\.agent-station\[data-state="sending"\] \.agent-station__label small \{[\s\S]*?color: var\(--office-navy\);/,
+    /\.analysis-agent-grid \.agent-station\[data-stage-status="running"\] \.agent-station__content/,
   );
-  assert.doesNotMatch(styles, /\[data-state="idle"\] \.agent-station__label,/);
   assert.match(packageJson, /"lucide-react"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 

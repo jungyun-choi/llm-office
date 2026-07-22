@@ -2,10 +2,13 @@ import { Clock3, LoaderCircle, RefreshCw, ShieldCheck, Wifi, WifiOff } from "luc
 
 import type { PocConnectionMode } from "../api/poc-client";
 import { OFFICE_COPY } from "../copy";
+import type { OfficeConnectionMode } from "../types";
+
+type HeaderConnectionMode = OfficeConnectionMode | PocConnectionMode;
 
 interface OfficeHeaderProps {
   currentTime: string;
-  connectionMode: PocConnectionMode;
+  connectionMode: HeaderConnectionMode;
   onRetryConnection: () => void;
 }
 
@@ -62,7 +65,7 @@ export function OfficeHeader({ currentTime, connectionMode, onRetryConnection }:
   );
 }
 
-function ConnectionIcon({ mode }: { mode: PocConnectionMode }) {
+function ConnectionIcon({ mode }: { mode: HeaderConnectionMode }) {
   if (mode === "checking") {
     return <LoaderCircle className="is-spinning" size={14} aria-hidden="true" />;
   }

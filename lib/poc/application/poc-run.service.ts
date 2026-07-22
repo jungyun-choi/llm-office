@@ -1,4 +1,4 @@
-import type { AgentRuntimeResult } from "./ports/agent-runtime";
+import type { AgentRuntimeProgressCallback, AgentRuntimeResult } from "./ports/agent-runtime";
 import type { CreatePocRunInput } from "../domain/poc-schema";
 import { PocError, PocRunnerError } from "../domain/poc-errors";
 import type { PocRunResult } from "../domain/poc-types";
@@ -14,22 +14,24 @@ import { buildPocRunResult } from "./poc-result-builder";
 export interface PocRunOptions {
   idempotencyKey: string;
   signal?: AbortSignal;
+  onProgress?: AgentRuntimeProgressCallback;
 }
 
 export class PocRunService {
   async execute(input: CreatePocRunInput, options: PocRunOptions): Promise<PocRunResult> {
     const fingerprint = await requestFingerprint(input);
     return pocSingleFlight.run(options.idempotencyKey, fingerprint, () =>
-      this.executeOnce(input, options.signal),
+      this.executeOnce(input, options.signal, options.onProgress),
     );
   }
 
   private async executeOnce(
     input: CreatePocRunInput,
     signal?: AbortSignal,
+    onProgress?: AgentRuntimeProgressCallback,
   ): Promise<PocRunResult> {
     const requestedAt = new Date().toISOString();
-    const runner = await this.selectRunner(input, signal);
+    const runner = await this.selectRunner(input, signal, onProgress);
     const completedAt = new Date().toISOString();
     return buildPocRunResult(runner, requestedAt, completedAt);
   }
@@ -37,6 +39,7 @@ export class PocRunService {
   private async selectRunner(
     input: CreatePocRunInput,
     signal?: AbortSignal,
+    onProgress?: AgentRuntimeProgressCallback,
   ): Promise<AgentRuntimeResult> {
     if (input.executionMode === "demo") return runDemoPoc(input.prompt);
     if (!isLocalRunnerEnabled()) throw localRuntimeError("disabled");
@@ -45,7 +48,7 @@ export class PocRunService {
     if (!(await runtime.isAvailable())) throw localRuntimeError("unavailable");
     const source = await new SyntheticSimulatorSource().resolve();
     try {
-      return await runtime.execute({ featureRequest: input.prompt, source, signal });
+      return await runtime.execute({ featureRequest: input.prompt, source, signal, onProgress });
     } catch (error) {
       throw mapRuntimeError(error);
     }

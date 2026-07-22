@@ -11,10 +11,25 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localPocProxyFlag = process.env.AI_OFFICE_LOCAL_PROXY_ENABLED === "1" ? "1" : "0";
+const localWorkerEnvironment = Object.fromEntries(
+  [
+    "AI_OFFICE_BRIDGE_TOKEN",
+    "AI_OFFICE_BRIDGE_PORT",
+    "AI_OFFICE_DEPLOYMENT_MODE",
+    "AI_OFFICE_INTERNAL_EXECUTION_ACK",
+  ].flatMap((name) => {
+    const value = process.env[name];
+    return value ? [[name, value]] : [];
+  }),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
+  compatibility_flags: ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  vars: {
+    ...localWorkerEnvironment,
+    AI_OFFICE_LOCAL_PROXY_ENABLED: localPocProxyFlag,
+  },
   d1_databases: d1
     ? [
         {

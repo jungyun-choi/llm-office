@@ -2,12 +2,12 @@ import { FileArchive, FileText, Inbox } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { OFFICE_COPY } from "../copy";
-import type { OfficeResult } from "../types";
+import type { OfficeResultPreview } from "../types";
 
 interface ResultVaultProps {
-  results: readonly OfficeResult[];
+  results: readonly OfficeResultPreview[];
   isReceiving: boolean;
-  onOpen: (result: OfficeResult) => void;
+  onOpen: (result: OfficeResultPreview) => void;
 }
 
 export function ResultVault({ results, isReceiving, onOpen }: ResultVaultProps) {
@@ -30,7 +30,7 @@ export function ResultVault({ results, isReceiving, onOpen }: ResultVaultProps) 
       ) : (
         <ul className="result-stack">
           {results.slice(0, 3).map((result, index) => (
-            <li key={result.id} style={{ "--stack-index": index } as CSSProperties}>
+            <li key={`${result.jobId}:${result.runId}`} style={{ "--stack-index": index } as CSSProperties}>
               <button type="button" onClick={() => onOpen(result)}>
                 <span className="result-stack__file" aria-hidden="true"><FileText size={15} /></span>
                 <span>

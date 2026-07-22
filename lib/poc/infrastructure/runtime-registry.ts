@@ -6,10 +6,19 @@ import { getOpenCodeRuntimeConfig } from "./opencode-runtime-config";
 export function isLocalRunnerEnabled(): boolean {
   const runtime = process.env.AI_OFFICE_AGENT_RUNTIME;
   return (
-    process.env.NODE_ENV !== "production" &&
     process.env.AI_OFFICE_LOCAL_RUNNER_ENABLED === "1" &&
-    (runtime === "codex" || runtime === "opencode")
+    (runtime === "codex" || runtime === "opencode") &&
+    productionRuntimeAllowed(runtime)
   );
+}
+
+function productionRuntimeAllowed(runtime: string | undefined): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  const profile = process.env.AI_OFFICE_OPENCODE_PROFILE;
+  return runtime === "opencode" &&
+    (profile === "internal" || profile === "company") &&
+    process.env.AI_OFFICE_DEPLOYMENT_MODE === "internal" &&
+    process.env.AI_OFFICE_INTERNAL_EXECUTION_ACK === "on-prem-only";
 }
 
 export function getConfiguredAgentRuntime(): AgentRuntime {

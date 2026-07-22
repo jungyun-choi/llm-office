@@ -8,23 +8,26 @@ import { useForm } from "react-hook-form";
 import type { PocConnectionMode } from "../api/poc-client";
 import { OFFICE_COPY } from "../copy";
 import { officeRequestSchema } from "../office-request-schema";
-import type { OfficeRequestInput } from "../types";
+import type { OfficeConnectionMode, OfficeRequestInput } from "../types";
+
+type ComposerConnectionMode = OfficeConnectionMode | PocConnectionMode;
 
 interface TaskComposerProps {
   isRunning: boolean;
-  connectionMode: PocConnectionMode;
+  isSubmitting: boolean;
+  connectionMode: ComposerConnectionMode;
   queueErrorMessage: string | null;
-  onRequest: (input: OfficeRequestInput) => boolean;
+  onRequest: (input: OfficeRequestInput) => Promise<boolean>;
 }
 
-export function TaskComposer({ isRunning, connectionMode, queueErrorMessage, onRequest }: TaskComposerProps) {
+export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErrorMessage, onRequest }: TaskComposerProps) {
   const form = useForm<OfficeRequestInput>({
     resolver: zodResolver(officeRequestSchema),
     defaultValues: { request: "" },
   });
 
-  const submitRequest = form.handleSubmit((input) => {
-    if (onRequest(input)) form.reset();
+  const submitRequest = form.handleSubmit(async (input) => {
+    if (await onRequest(input)) form.reset();
   });
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -60,7 +63,7 @@ export function TaskComposer({ isRunning, connectionMode, queueErrorMessage, onR
           onKeyDown={handleComposerKeyDown}
           {...form.register("request")}
         />
-        <button type="submit">
+        <button type="submit" disabled={isSubmitting}>
           {isRunning ? (
             <ListPlus size={18} aria-hidden="true" />
           ) : (
@@ -82,6 +85,6 @@ export function TaskComposer({ isRunning, connectionMode, queueErrorMessage, onR
   );
 }
 
-export function getPocTruthLabel(connectionMode: PocConnectionMode): string {
+export function getPocTruthLabel(connectionMode: ComposerConnectionMode): string {
   return OFFICE_COPY.composer.pocTruth[connectionMode];
 }

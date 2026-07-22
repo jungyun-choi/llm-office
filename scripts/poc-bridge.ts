@@ -1,69 +1,140 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { handleLocalPocRun, localCapabilities } from "../lib/poc/http/local-poc-controller";
 import { jsonResponse } from "../lib/poc/http/poc-http";
+import { isProductionExecutionAcknowledged } from "../lib/office-jobs/http/local-job-proxy";
+import {
+  createLocalJobSystem,
+  type LocalJobSystem,
+} from "../lib/office-jobs/infrastructure/local-job-system";
 
 const HOST = "127.0.0.1";
 const PORT = parsePort(process.env.AI_OFFICE_BRIDGE_PORT);
 const MAX_BODY_BYTES = 8 * 1_024;
-const BRIDGE_TOKEN = randomBytes(32).toString("base64url");
+const BRIDGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u;
+const BRIDGE_TOKEN = requireConfiguredBridgeToken();
+let jobSystem: LocalJobSystem | undefined;
 
 const server = createServer(async (request, response) => {
-  const origin = request.headers.origin;
-  if (!isLoopbackRequest(request) || !isAllowedHost(request.headers.host)) {
-    sendJson(response, bridgeError("LOOPBACK_ONLY", 403));
-    return;
-  }
-  if (origin) {
-    sendJson(response, bridgeError("ORIGIN_DENIED", 403));
-    return;
-  }
-  if (request.method === "OPTIONS") {
-    response.writeHead(204).end();
-    return;
-  }
-
-  const pathname = new URL(request.url ?? "/", `http://${HOST}:${PORT}`).pathname;
-  if (request.method === "GET" && pathname === "/api/v1/poc/capabilities") {
-    sendJson(response, jsonResponse(await localCapabilities(BRIDGE_TOKEN), 200, crypto.randomUUID()));
-    return;
-  }
-  if (request.method === "POST" && pathname === "/api/v1/poc/runs") {
-    if (!hasValidBridgeToken(request)) {
-      sendJson(response, bridgeError("BRIDGE_TOKEN_REQUIRED", 401));
+  try {
+    const origin = request.headers.origin;
+    if (!isLoopbackRequest(request) || !isAllowedHost(request.headers.host)) {
+      await sendJson(response, bridgeError("LOOPBACK_ONLY", 403));
       return;
     }
-    await handleRun(request, response);
-    return;
+    if (origin) {
+      await sendJson(response, bridgeError("ORIGIN_DENIED", 403));
+      return;
+    }
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
+    if (!hasValidBridgeToken(request)) {
+      await sendJson(response, bridgeError("BRIDGE_TOKEN_REQUIRED", 401));
+      return;
+    }
+
+    const requestUrl = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
+    const pathname = requestUrl.pathname;
+    if (request.method === "GET" && pathname === "/api/v1/poc/capabilities") {
+      await sendJson(response, jsonResponse(await localCapabilities(), 200, crypto.randomUUID()));
+      return;
+    }
+    if (request.method === "POST" && pathname === "/api/v1/poc/runs") {
+      await handleControllerRequest(request, response, (webRequest) => handleLocalPocRun(webRequest));
+      return;
+    }
+    if (pathname.startsWith("/api/v1/jobs")) {
+      await handleJobRoute(request, response, requestUrl);
+      return;
+    }
+    await sendJson(response, bridgeError("NOT_FOUND", 404));
+  } catch {
+    await sendJson(response, bridgeError("INTERNAL_ERROR", 500));
   }
-  sendJson(response, bridgeError("NOT_FOUND", 404));
 });
 
 server.requestTimeout = 190_000;
 server.headersTimeout = 10_000;
 server.listen(PORT, HOST, () => {
-  process.stdout.write(`AI Office synthetic POC bridge: http://${HOST}:${PORT}\n`);
+  process.stdout.write(`AI Office local bridge: http://${HOST}:${PORT}\n`);
 });
 
-async function handleRun(
+async function handleJobRoute(
   incoming: IncomingMessage,
   outgoing: ServerResponse,
+  requestUrl: URL,
+): Promise<void> {
+  if (!isProductionExecutionAcknowledged()) {
+    await sendJson(
+      outgoing,
+      bridgeError(
+        "PRODUCTION_EXECUTION_DENIED",
+        503,
+        "운영 환경에서는 internal 배포와 on-prem 실행 확인이 모두 필요합니다.",
+      ),
+    );
+    return;
+  }
+
+  const controller = getJobSystem().controller;
+  if (incoming.method === "GET" && requestUrl.pathname === "/api/v1/jobs/capabilities") {
+    await handleControllerRequest(incoming, outgoing, (request) => controller.capabilities(request));
+    return;
+  }
+
+  if (incoming.method === "GET" && requestUrl.pathname === "/api/v1/jobs") {
+    await handleControllerRequest(incoming, outgoing, (request) => controller.list(request));
+    return;
+  }
+  if (incoming.method === "POST" && requestUrl.pathname === "/api/v1/jobs") {
+    await handleControllerRequest(incoming, outgoing, (request) => controller.create(request));
+    return;
+  }
+  const actionMatch = requestUrl.pathname.match(/^\/api\/v1\/jobs\/([^/]+)\/actions$/u);
+  if (incoming.method === "POST" && actionMatch) {
+    await handleControllerRequest(
+      incoming,
+      outgoing,
+      (request) => controller.action(request, actionMatch[1]),
+    );
+    return;
+  }
+  const jobMatch = requestUrl.pathname.match(/^\/api\/v1\/jobs\/([^/]+)$/u);
+  if (incoming.method === "GET" && jobMatch) {
+    await handleControllerRequest(
+      incoming,
+      outgoing,
+      (request) => controller.get(request, jobMatch[1]),
+    );
+    return;
+  }
+  await sendJson(outgoing, bridgeError("NOT_FOUND", 404));
+}
+
+async function handleControllerRequest(
+  incoming: IncomingMessage,
+  outgoing: ServerResponse,
+  handler: (request: Request) => Response | Promise<Response>,
 ): Promise<void> {
   try {
-    const body = await readBody(incoming);
+    const bodyBuffer = incoming.method === "GET" || incoming.method === "HEAD"
+      ? undefined
+      : await readBody(incoming);
     const controller = new AbortController();
     const abortIfOpen = () => {
       if (!outgoing.writableEnded) controller.abort();
     };
     incoming.once("aborted", abortIfOpen);
     outgoing.once("close", abortIfOpen);
-    const request = new Request(`http://${HOST}:${PORT}/api/v1/poc/runs`, {
-      method: "POST",
+    const request = new Request(`http://${HOST}:${PORT}${incoming.url ?? "/"}`, {
+      method: incoming.method,
       headers: bridgeHeaders(incoming),
-      body: body.toString("utf8"),
+      body: bodyBuffer ? Uint8Array.from(bodyBuffer).buffer : undefined,
       signal: controller.signal,
     });
-    await sendJson(outgoing, await handleLocalPocRun(request));
+    await sendJson(outgoing, await handler(request));
   } catch (error) {
     const oversized = error instanceof PayloadTooLargeError;
     if (oversized) outgoing.once("finish", () => incoming.destroy());
@@ -82,6 +153,11 @@ async function handleRun(
       ),
     );
   }
+}
+
+function getJobSystem(): LocalJobSystem {
+  jobSystem ??= createLocalJobSystem();
+  return jobSystem;
 }
 
 function readBody(request: IncomingMessage): Promise<Buffer> {
@@ -135,6 +211,13 @@ function parsePort(value: string | undefined): number {
   return Number.isInteger(port) && port >= 1_024 && port <= 65_535 ? port : 4317;
 }
 
+function requireConfiguredBridgeToken(): string {
+  const token = process.env.AI_OFFICE_BRIDGE_TOKEN;
+  if (token && BRIDGE_TOKEN_PATTERN.test(token)) return token;
+  process.stderr.write("AI Office bridge configuration error: bridge token is missing or invalid.\n");
+  process.exit(1);
+}
+
 function hasValidBridgeToken(request: IncomingMessage): boolean {
   const candidate = request.headers["x-ai-office-bridge-token"];
   if (typeof candidate !== "string") return false;
@@ -155,10 +238,27 @@ function isAllowedHost(host: string | undefined): boolean {
   return host === `${HOST}:${PORT}` || host === `localhost:${PORT}`;
 }
 
-function bridgeError(code: string, status: number): Response {
+function bridgeError(
+  code: string,
+  status: number,
+  message = "Local AI Office bridge rejected the request.",
+): Response {
   return jsonResponse(
-    { error: { code, message: "Local synthetic POC bridge rejected the request." } },
+    { error: { code, message, retryable: status >= 500 } },
     status,
     crypto.randomUUID(),
   );
 }
+
+let shuttingDown = false;
+function shutdown(): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => {
+    jobSystem?.close();
+    process.exit(0);
+  });
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

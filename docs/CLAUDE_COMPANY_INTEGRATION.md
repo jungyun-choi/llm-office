@@ -1,51 +1,60 @@
 # Claude용 사내 연동 인계서
 
-이 문서는 Claude가 `ai-office`와 회사 성능 시뮬레이터 저장소를 함께 열고,
-사내 OpenCode 및 사내 LLM에 연결할 때 사용하는 작업 지시서다.
+이 문서는 사내 Claude에게 `ai-office`와 회사 성능 시뮬레이터 저장소를 함께 보여 주고,
+현재 합성 adapter만 회사 adapter로 교체하도록 지시하는 인계서다.
 
-## 1. 현재 상태
+## 1. 이미 구현된 골격
 
-- 웹 UI와 결과 계약은 동작한다.
-- 외부 Zen POC는 합성 저장소만 사용한다.
-- 현재 POC 실행은 요청당 OpenCode 프로세스 1개, 모델 호출 1회다.
-- 화면의 여섯 좌석은 논리 역할이다.
-- 사내 연동에서는 UI를 다시 만들지 말고 `AgentRuntime`과 `SimulatorSource`를 교체한다.
+UI와 업무 상태 머신은 다시 만들 필요가 없다.
 
-| 내부 role id | 화면 역할 | 회사 자료 |
-|---|---|---|
-| `orchestrator` | 오비트 | 요청 분해와 최종 Claude 인계팩 |
-| `research` | DLD · 위키 | `.LLM`, DLD, 디버깅 이력 |
-| `framework` | 코드 · 모델링 | `common`, FTL, FIL, HIL |
-| `estimate` | TopView · 영향/견적 | 커맨드 시나리오와 패킷 흐름 |
-| `test` | 테스트 | 기존 테스트와 성능 모델 정합성 |
-| `git` | Claude · Git | 코딩 인계팩과 이슈 초안 |
+- `POST/GET /api/v1/jobs` 기반 SQLite 영속 FIFO와 히스토리
+- OpenCode 분석실 → 사람 승인 → Claude 개발실 → 서버 테스트 → 사람 승인 → Git
+- 분석 패킷 digest와 변경 digest에 묶인 optimistic version 승인
+- 업무별 `ai-office/<job-id>` Git branch와 repository 밖 전용 worktree
+- Claude의 shell/network/Git 도구 차단과 변경 경로 allowlist
+- Commit과 Push 분리, Push 기본 비활성
+- 실행기·저장소를 교체하기 위한 `AgentRuntime`, `SimulatorSource`, `JobExecutionPort`
 
-## 2. 소스를 열기 전 필수 조건
+현재 합성 POC의 분석실은 요청당 OpenCode 프로세스 1개·모델 턴 1개로 여러 논리 역할의
+결과를 함께 만든다. 회사판에서는 같은 결과 schema를 유지하면서 실제 orchestrator/subagent
+fan-out으로 바꿀 수 있다.
 
-다음 조건이 모두 충족되기 전에는 실제 simulator 저장소를 Claude/OpenCode에 열지 않는다.
+사내 모델에서 각 역할을 더 깊게 순차 실행하고 진행 상황을 좌석에 표시하는 정확한 연결
+계약은 [Company 5+1 순차 분석 연동](./COMPANY_SEQUENTIAL_ANALYSIS.md)을 따른다. 별도
+인메모리 status API를 만들지 않고 현재 SQLite Job polling에 붙인다.
+공개 골격의 순서·검증·progress 구현은
+`lib/poc/application/sequential-agent-runtime.ts`에 있으므로, 사내 branch에서는 인증된
+저수준 OpenCode turn executor와 승인된 역할 prompt loader만 주입한다.
 
-- 회사가 승인한 사내 Claude/OpenCode/LLM endpoint다.
-- 입력과 출력이 모델 학습에 사용되지 않고 보존 기간이 회사 정책과 일치한다.
-- 외부 provider로 나가는 network egress가 차단되거나 allowlist로 제한된다.
-- 허용 provider/model ID 목록을 서버가 검증한다.
-- simulator와 문서 접근 권한은 우선 read-only다.
+## 2. 역할 계약
 
-개인용 또는 외부 Claude를 사용해야 한다면 `ai-office` 골격만 보여 주고 회사 저장소,
-경로, 문서, 코드, 성능 수치는 제공하지 않는다.
+화면의 role id는 API 호환성을 위해 유지한다. 이름과 실제 사내 경로는 설정으로 바꾼다.
 
-## 3. Claude에게 두 저장소를 보여 주는 방법
+| role id | 화면 역할 | 찾아야 할 회사 자료 | Claude 인계 기여 |
+|---|---|---|---|
+| `orchestrator` | 오비트 | 모든 역할 결과 | 구현 순서, 결정 사항, 최종 coding packet |
+| `research` | DLD · 위키 | `.LLM`, DLD, 설계 문서, 디버깅 이력 | 요구사항·상세 스펙·근거 locator |
+| `framework` | 코드 · 모델링 | `common`, SystemC convention, FTL/FIL/HIL | 기존 구조, 수정 지점, 모델 시간/상태 영향 |
+| `estimate` | TopView · 영향/견적 | command scenario, packet-flow 그림 | 계층별 영향, 의존성, 작업 크기·위험 |
+| `test` | 테스트 | unit/integration/regression/performance harness | 수용 기준, 테스트 matrix, golden trace |
+| `git` | 인계 · Git | issue/PR template, CODEOWNERS, 기존 이슈 | Claude-ready brief와 Git 초안 |
 
-두 저장소를 같은 상위 디렉터리에 둔다. 실제 이름과 경로는 달라도 된다.
+실제 디렉터리는 `common/FTL/FIL/HIL`이라고 가정하지 않는다. repository를 먼저 탐색하고,
+회사 전용 설정에 발견한 경로를 넣는다.
+
+## 3. 두 저장소 배치
+
+예시는 다음과 같다. 실제 경로는 달라도 된다.
 
 ```text
-company-workspace/
+/srv/company-workspace/
 ├── ai-office/
 └── simulator/
 ```
 
-승인된 사내 Claude/OpenCode만 `company-workspace`를 작업 공간으로 열고 두 저장소를 읽게 한다.
-회사 경로를 코드에 하드코딩하지 말고 [agents.example.yaml](../config/agents.example.yaml)을
-복사한 사내 전용 설정 파일에만 기록한다.
+사내 Claude에게 두 저장소를 열어 주되, 첫 단계에서는 `ai-office`만 수정하도록 한다.
+simulator는 adapter 검증 중 read-only로 시작하고, 최종 coding runtime에서만 승인된 worktree
+쓰기 권한을 연다.
 
 ```bash
 cp ai-office/config/agents.example.yaml ai-office/config/agents.company.yaml
@@ -53,13 +62,66 @@ cp ai-office/config/opencode.company.example.json ai-office/config/opencode.comp
 chmod 600 ai-office/config/agents.company.yaml ai-office/config/opencode.company.json
 ```
 
-두 사내 설정 파일은 `.gitignore`에 포함돼 있다. OpenCode 작업 디렉터리는 두 저장소의
-공통 상위인 `company-workspace`로 지정하고 `external_directory` 권한은 계속 거부한다.
+회사 설정 파일과 credential은 Git에 넣지 않는다. 서버 환경 또는 회사 secret/config
+manager로 주입한다.
 
-## 4. 역할별 모델 선택
+## 4. 사내 전환에서 교체할 부분
 
-[opencode.company.example.json](../config/opencode.company.example.json)은 역할마다 다른
-OpenCode 모델을 선택할 수 있는 예시다. 회사 OpenCode가 표시하는 정확한 모델 ID를 사용한다.
+### A. 분석 source
+
+`SyntheticSimulatorSource`와 합성 prompt를 그대로 확장하지 말고 별도의
+`InternalSimulatorSource`를 구현한다.
+
+- 설정된 repository root를 `realpath`로 고정한다.
+- `.LLM`, DLD, TopView, source/test 경로를 각각 allowlist로 받는다.
+- 요청과 관련된 파일만 검색하고 파일 수·개별 크기·총 snapshot 크기를 제한한다.
+- symlink, `..`, absolute path 탈출을 거부한다.
+- 결과 근거는 repository-relative path와 revision/digest로 남긴다.
+- secret·credential·대용량 trace 원문은 snapshot 전에 필터링한다.
+
+### B. 사내 OpenCode runtime
+
+`OpenCodeCliRuntime`의 company profile을 회사 실행 방식에 맞춘다.
+
+- provider URL과 credential은 환경/secret manager에서만 읽는다.
+- 외부 Zen/Codex fallback을 금지한다.
+- 모델은 서버 allowlist의 catalog id만 받는다.
+- orchestrator가 필요한 역할만 호출하고, 8GB 서버 기본값은 순차 실행으로 둔다.
+- 각 결과에 role, 실제 model id, source revision, prompt/profile digest를 기록한다.
+- 긴 호출은 `preparing_context → calling_model → validating_output` phase와 시작 시각만
+  progress callback으로 기록한다. chain-of-thought나 가짜 퍼센트는 노출하지 않는다.
+- 기존 `PocModelOutput` schema와 role id는 유지한다.
+
+### C. Claude coding runtime
+
+현재 `LocalJobExecutor`는 Claude Code CLI용 기본 adapter다. 회사 Claude CLI가 호환되면
+환경 설정만 교체하고, 다르면 `JobExecutionPort` 구현을 추가한다.
+
+- coding packet은 분석 결과와 명시적 allowlist만 포함한다.
+- 회사 profile에서만 실제 요청 원문을 전달한다.
+- Claude는 업무 worktree만 수정하고 Commit/Push는 하지 않는다.
+- 서버가 변경 경로, HEAD, symlink, bounded Diff를 다시 검증한다.
+- 테스트 명령은 모델 출력이 아니라 서버의 command-id allowlist로 선택한다.
+- 사내 모델 CLI에 filesystem sandbox가 있다면 OS sandbox와 함께 사용한다.
+
+### D. 테스트와 Git
+
+합성 Python 명령을 회사 simulator의 승인된 test command registry로 교체한다. 예:
+
+```text
+unit:ftl-buffer
+integration:host-to-nand
+regression:topview-scenario-17
+```
+
+command id만 job에 저장하고 실제 argv는 서버 설정에서 결정한다. 처음에는 `commit`까지만
+허용하고, Push는 서비스 계정·branch protection·감사 정책 검증 후 켠다. main/master 직접
+Push와 force-push/merge/delete는 계속 금지한다.
+
+## 5. 역할별 모델 배정
+
+[opencode.company.example.json](../config/opencode.company.example.json)은 역할별 기본 모델
+예시다.
 
 ```bash
 export AI_OFFICE_MODEL_ORCHESTRATOR='<company-provider>/<general-model>'
@@ -68,114 +130,99 @@ export AI_OFFICE_MODEL_FRAMEWORK='<company-provider>/CodeLLMPro'
 export AI_OFFICE_MODEL_ESTIMATE='<company-provider>/<general-model>'
 export AI_OFFICE_MODEL_TEST='<company-provider>/CodeLLMPro'
 export AI_OFFICE_MODEL_GIT='<company-provider>/CodeLLMPro'
+export AI_OFFICE_CLAUDE_MODEL='<company-provider>/<coding-model>'
 ```
 
-UI 모델 선택 기능은 다음 계약으로 구현한다.
+현재 POC UI는 실제 runtime이 사용한 분석/코딩 모델을 상태에 표시하고, 배정은 서버 설정으로
+관리한다. 좌석별 UI 선택을 추가할 때는 다음 계약을 지킨다.
 
-- 서버가 허용 모델 카탈로그와 기본 배정을 반환한다.
-- UI는 카탈로그의 `id`만 선택한다.
-- 요청은 `agentModels: { runtimeRole: modelCatalogId }` 형태로 전달한다.
-- `runtimeRole`은 설정의 `runtime_role`이며 기존
-  `orchestrator|research|framework|estimate|test|git` 계약을 그대로 사용한다.
-- 서버가 catalog id를 실제 OpenCode model id로 변환한다.
-- 변환된 provider/model ID가 회사 allowlist에 포함되는지 서버가 다시 검증한다.
-- 사용자가 입력한 임의 model 문자열을 그대로 CLI에 넘기지 않는다.
+- capabilities가 허용 model catalog와 역할별 기본 catalog id를 반환한다.
+- 브라우저는 임의 provider/model 문자열이 아니라 catalog id만 전송한다.
+- 서버가 catalog id를 실제 model id로 변환하고 allowlist를 재검증한다.
+- 생성 시 선택한 배정을 job에 snapshot하여 실행 도중 설정 변경 영향을 받지 않게 한다.
 
-## 5. Claude가 구현할 최소 작업
+## 6. 운영 환경 예시
 
-1. `InternalSimulatorSource`를 추가해 설정된 `.LLM`, DLD, TopView, `common`, FTL, FIL,
-   HIL에서 요청과 관련된 파일만 읽는다.
-2. `InternalOpenCodeRuntime` 또는 company profile을 추가하고 외부 Zen이 아닌 사내
-   OpenCode endpoint/model만 사용한다.
-3. 오케스트레이터가 `research`, `framework`, `estimate`, `test`, `git` 역할을 호출하고
-   역할별 선택 모델을 적용한다.
-4. 현재 `PocModelOutput` 결과 계약은 유지한다. UI 변경을 최소화하기 위해 role id도 유지한다.
-5. capabilities API에 모델 카탈로그와 현재 agent-model 배정을 추가하고, 사무실 각 좌석에
-   허용 모델을 선택하는 작은 select를 붙인다.
-6. Git 연동은 처음에는 이슈 초안까지만 만든다. 실제 등록은 사람 승인 후 실행한다.
+정확한 값은 회사 환경에 맞게 바꾼다.
 
-시작할 코드 위치:
+```dotenv
+NODE_ENV=production
+AI_OFFICE_LOCAL_PROXY_ENABLED=1
+AI_OFFICE_LOCAL_RUNNER_ENABLED=1
+AI_OFFICE_DEPLOYMENT_MODE=internal
+AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only
+AI_OFFICE_BRIDGE_TOKEN=<웹과-bridge가-공유하는-64자리-hex-난수>
 
-- `lib/poc/infrastructure/opencode-runtime-config.ts`
-- `lib/poc/infrastructure/opencode-process.ts`
-- `lib/poc/infrastructure/runtime-registry.ts`
-- `lib/poc/infrastructure/synthetic-simulator-source.ts`
-- `lib/poc/domain/poc-schema.ts`
-- `lib/poc/domain/poc-types.ts`
-- `app/features/office/api/poc-client.ts`
-- `app/features/office/office-data.ts`
+AI_OFFICE_AGENT_RUNTIME=opencode
+AI_OFFICE_OPENCODE_PROFILE=company
+AI_OFFICE_OPENCODE_BIN=/opt/company/bin/opencode
+AI_OFFICE_OPENCODE_MODEL=company/CodeLLMPro
 
-`poc/simulator/AGENTS.md`와 합성 prompt 파일은 무결성 검사가 걸려 있다. 사내 prompt는
-별도 디렉터리에 만들고 company runtime에서만 사용한다.
+AI_OFFICE_CODING_ENABLED=1
+AI_OFFICE_CLAUDE_PROFILE=internal
+AI_OFFICE_CLAUDE_BIN=/opt/company/bin/claude
+AI_OFFICE_CLAUDE_MODEL=company/CodeLLMPro
+AI_OFFICE_CODING_REPO=/srv/company-workspace/simulator
+AI_OFFICE_CODING_ALLOWED_PATHS=<reviewed,comma-separated,repository-relative-paths>
+AI_OFFICE_DATA_DIR=/var/lib/ai-office
+AI_OFFICE_GIT_PUSH_ENABLED=0
+```
 
-### 대기열·히스토리·에러 표시
+실제 회사 source를 연결하기 전까지 OpenCode는 공개 `zen` 합성 profile,
+`AI_OFFICE_CLAUDE_PROFILE=synthetic`을 유지한다. 공개 설정에는 아직 `company` profile이
+없으므로 사내 adapter를 먼저 추가해야 하며, coding `internal`은
+`AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only` 없이는 열리지 않는다.
+공개 저장소의 번들 `LocalJobExecutor`는 synthetic/macOS sandbox 전용이므로 internal profile을
+의도적으로 거부한다. Linux 회사 서버에서는 승인된 rootless container 실행기를
+`JobExecutionPort`로 연결한 뒤에만 coding을 활성화한다.
 
-현재 POC의 `/api/v1/poc/runs`는 응답이 끝날 때까지 연결을 잡는 단일 실행 API다.
-합성 POC UI는 최대 10개의 실행·대기 업무와 최근 완료·실패 20건의 원문·결과를 브라우저
-`localStorage`에 보관한다. 한 탭에서 쓰는 합성 데이터 시연 전용이며 회사 정보에는 사용하지 않는다.
-복수 사용자, 중앙 감사, 브리지 재시작을 견뎌야 하는 회사 버전에는 이 저장 방식을 쓰지 않는다.
-
-회사 버전은 다음 최소 계약만 서버에 영속화한다.
-
-- `POST /api/v1/jobs`는 업무를 저장하고 즉시 `202 { jobId, state, queuePosition }`을 반환한다.
-- 회사 SSO identity와 허용된 project scope를 job에 고정하고, 목록·상세·event마다
-  tenant, project, job 소유권을 다시 확인한다.
-- 기본 worker는 생성 순서대로 한 건씩 처리한다. 상태는
-  `QUEUED | RUNNING | COMPLETED | FAILED | CANCELED`만 사용한다.
-- `Idempotency-Key`를 사용자·project 범위에서 검증하고 같은 요청의 중복 실행을 막는다.
-- 사용자·project별 queue 상한, 요청 속도, token·비용 budget, 실행 timeout과 retry 상한을
-  적용한다. 초과 시 새 job을 저장하지 않고 `429`와 안전한 재시도 시점을 반환한다.
-- `GET /api/v1/jobs`는 권한 범위 안의 대기열과 완료 히스토리를 pagination으로,
-  `GET /api/v1/jobs/{jobId}`는 권한 확인 후 결과를 반환한다.
-- `GET /api/v1/jobs/{jobId}/events`는 `job.state.changed`와
-  `agent.run.state.changed`를 전달한다. UI는 이를 업무 카드와 각 좌석 상태에 표시한다.
-- 에이전트 실패에는 `agentRole, code, safeMessage, retryable, attempt, occurredAt,
-  correlationId`만 노출한다. 원문 prompt, 결과 본문, stack trace, 사내 경로는 이벤트·로그에 넣지 않는다.
-- 원문 prompt와 결과는 승인된 사내 암호화 저장소에만 보관하고 권한·보존 기간을 적용한다.
-  브라우저 `localStorage`, URL, 브라우저 히스토리에는 저장하지 않는다.
-- 완료·실패 job에는 TTL을 적용하고, 대기 취소·히스토리 삭제도 같은 감사·권한 검사를 거친다.
-
-상세 상태 모델이 필요해질 때만 [ARCHITECTURE.md](./ARCHITECTURE.md)의 Control API와 이벤트
-계약으로 확장한다. 첫 회사 POC에는 별도 메시지 브로커나 복잡한 우선순위 기능을 넣지 않는다.
-
-## 6. Claude에게 그대로 줄 프롬프트
+## 7. 사내 Claude에게 그대로 줄 프롬프트
 
 ```text
 ai-office 저장소와 회사 simulator 저장소를 함께 분석해 줘.
 
-먼저 ai-office/docs/CLAUDE_COMPANY_INTEGRATION.md와
-ai-office/config/agents.example.yaml을 읽어.
+먼저 다음 파일을 읽어:
+- ai-office/docs/CLAUDE_COMPANY_INTEGRATION.md
+- ai-office/docs/DUAL_OFFICE_WORKFLOW.md
+- ai-office/config/agents.example.yaml
+- ai-office/config/opencode.company.example.json
 
 목표:
-1. SyntheticSimulatorSource를 회사 저장소용 InternalSimulatorSource로 교체
-2. 외부 Zen 대신 회사 OpenCode와 사내 LLM만 사용
-3. .LLM, DLD, TopView, common, FTL, FIL, HIL 경로는 설정 파일로 주입
-4. 역할별 허용 LLM 모델 선택 기능 추가
-5. 현재 UI와 PocModelOutput role id는 유지
-6. 결과에 Claude 코딩 인계팩과 Git 이슈 초안 포함
-7. 업무는 서버의 영속 FIFO 대기열에서 한 건씩 처리하고, 히스토리와 에이전트 오류를 UI에 표시
+1. 현재 UI, /api/v1/jobs, Job state/digest/version 승인 계약을 유지한다.
+2. SyntheticSimulatorSource와 합성 OpenCode profile만 회사용 adapter로 교체한다.
+3. 실제 repository를 먼저 조사해 .LLM/DLD/TopView/common/FTL/FIL/HIL에 해당하는
+   정확한 경로를 찾고 회사 설정으로 주입한다. 경로를 추측하거나 하드코딩하지 않는다.
+4. 사내 OpenCode endpoint와 회사 allowlist model만 사용한다. 외부 fallback은 금지한다.
+5. 역할별 결과에 근거 파일 locator와 revision/digest를 남긴다.
+6. Claude coding은 승인된 worktree와 경로에서만 실행한다.
+7. 테스트는 server-owned command id allowlist로 실행한다.
+8. Commit/Push는 기존 사람 승인 gate를 우회하지 않는다.
 
-먼저 두 저장소의 실제 구조와 회사 OpenCode 모델 ID를 확인하고,
-작은 단계로 구현해. 합성 POC 경로와 회사 경로가 섞이지 않게 해.
-회사 코드나 문서를 외부 모델로 전송하지 마.
+먼저 read-only로 두 저장소의 실제 구조, 회사 OpenCode CLI 사용법, 모델 ID, 테스트 명령,
+Git 원격/branch 정책을 보고해. 확인되지 않은 값은 TODO로 남기고 작은 단계로 구현해.
+회사 코드나 문서를 외부 모델로 보내지 마.
 ```
 
-## 7. 완료 기준
+## 8. 완료 기준
 
-- UI에서 역할별 허용 모델을 선택할 수 있다.
-- 실행 결과에 각 역할이 실제 사용한 모델 ID가 표시된다.
-- 코드 분석 역할에는 `CodeLLMPro`를 배정할 수 있다.
-- 요청과 관련된 DLD, TopView, 코드 근거가 파일 locator와 함께 결과에 남는다.
-- 같은 요청을 반복하면 동일한 역할·결과 schema가 생성된다.
-- 여러 업무를 연속 등록하면 FIFO 대기열에 남고 새로고침·서버 재시작 후에도 이어진다.
-- 실패한 에이전트와 안전한 오류 설명을 해당 좌석 및 업무 히스토리에서 확인할 수 있다.
-- 외부 Zen을 끈 상태에서도 회사 OpenCode만으로 끝까지 완료된다.
-- Git 이슈는 승인 전에는 실제 등록되지 않는다.
+- 외부 Zen을 끈 상태에서 사내 OpenCode로 분석이 완료된다.
+- 여러 업무가 SQLite FIFO에 남고 새로고침·bridge 재시작 후 이어진다.
+- DLD, TopView, 코드 분석 결과에 정확한 상대 경로와 revision 근거가 있다.
+- 코드 분석/테스트 역할에 `CodeLLMPro` 등 허용 모델을 배정할 수 있다.
+- 분석 패킷 승인 전 Claude 프로세스가 시작되지 않는다.
+- Claude 변경은 업무 worktree와 승인된 경로 밖으로 나가지 않는다.
+- 서버 테스트 통과와 변경 digest 승인 전 Commit/Push가 실행되지 않는다.
+- 실패 단계·안전한 오류·재시도 여부가 좌석과 히스토리에 보인다.
+- 앱 로그와 API에 token, credential, 절대 worktree 경로, stack trace가 노출되지 않는다.
+- SSO/MFA, project 권한, 보존·백업·감사 정책이 운영 전에 적용된다.
 
-## 8. 회사에서 먼저 확인할 값
+## 9. 회사에서 먼저 확인할 값
 
-- 회사 OpenCode 버전과 실행 명령
-- `CodeLLMPro`를 포함한 정확한 provider/model ID 목록
-- simulator 저장소의 실제 `.LLM`, DLD, TopView, common, FTL, FIL, HIL 위치
-- GitHub Enterprise 주소, 이슈 저장소, 인증 방식
-- 회사 데이터가 외부로 나가지 않는다는 네트워크 정책
+- 회사 OpenCode/Claude CLI 버전과 non-interactive 실행 계약
+- `CodeLLMPro`를 포함한 정확한 provider/model catalog
+- simulator의 실제 `.LLM`, DLD, TopView, source/test 경로
+- SystemC build/test command와 예상 실행 시간·자원 상한
+- GitHub Enterprise/GitLab 주소, branch protection, 서비스 계정 권한
+- 사내 모델 endpoint 외 egress 차단 여부
+- 사용자 인증, project 권한, 데이터 보존·백업 요구사항
+- 회사 서버 OS와 승인된 rootless container/runtime, 테스트 resource limit

@@ -82,24 +82,26 @@ AI Office는 사내 Wiki, 코드, 디버깅 히스토리를 사내 신뢰 영역
 
 ### 3.2 POC의 교체 가능한 실행 계약
 
-웹 사무실은 특정 CLI, 모델 또는 저장소 형식을 알지 않는다. 두 port만 의존한다.
+웹 사무실은 특정 CLI, 모델 또는 저장소 형식을 알지 않는다. 분석과 코딩 실행 port에만 의존한다.
 
 ```text
 Office UI
-   │ normalized request / progress / result
+   │ job command / progress / approval / artifact review
    ▼
-POC Application Service
-   ├─ AgentRuntime      ─ OpenCodeCli | CodexCli | Deterministic
-   └─ SimulatorSource  ─ Synthetic | Internal Connector
+Job Service + persistent FIFO
+   ├─ AgentRuntime       ─ OpenCodeCli | CodexCli | Deterministic
+   ├─ SimulatorSource   ─ Synthetic | Internal Connector
+   └─ JobExecutionPort  ─ ClaudeCode + Worktree/Test/Git | Internal Coding Adapter
 ```
 
 - `AgentRuntime`은 정규화된 요청과 source snapshot을 받아 버전이 고정된 결과 schema를 반환한다.
 - `SimulatorSource`는 허용된 자료만 최소 snapshot과 digest로 만들며, 모델이 임의로 파일 시스템을 탐색하지 않게 한다.
+- `JobExecutionPort`는 승인된 coding packet을 업무별 worktree에서 구현하고, 서버 소유 테스트와 Git publisher를 연결한다.
 - UI 애니메이션은 모델 고유 event나 token stream이 아니라 `accepted`, 역할별 handoff, `completed` 같은 coarse event만 사용한다.
 - 외부 OpenCode Zen 또는 Codex runtime은 합성 source와만 결합할 수 있다. 실제 사내 source는 사내 OpenCode/LLM runtime과 동일한 신뢰 영역에서만 결합한다.
-- Git adapter는 분석 결과를 초안으로 바꿀 뿐이며, publish 권한과 사람 승인은 별도 port로 유지한다.
+- 분석 agent와 Claude coding runtime에는 Git credential이 없다. deterministic publisher만 최신 change digest 승인 뒤 업무 branch를 Commit하고, 별도 opt-in일 때만 Push한다.
 
-이 경계 덕분에 POC에서 `OpenCodeCliRuntime(Zen) + SyntheticSimulatorSource`를 사용한 뒤 UI를 바꾸지 않고 `OpenCodeCliRuntime(사내 모델) + InternalRepoSource`로 전환할 수 있다.
+이 경계 덕분에 POC의 `OpenCodeCliRuntime(Zen) + SyntheticSimulatorSource + ClaudeCodeRuntime`을 UI 변경 없이 `OpenCodeCliRuntime(사내 모델) + InternalRepoSource + 사내 CodingRuntime`으로 전환할 수 있다.
 
 ### 3.3 현재 로컬 Zen POC 토폴로지
 
@@ -111,15 +113,19 @@ POC Application Service
   │ server-side proxy, token은 브라우저에 노출하지 않음
   ▼
 127.0.0.1:4317 Zen bridge
-  │ raw 사용자 입력 → 서버 소유 Synthetic 시나리오로 치환
-  ▼
-OpenCode 1.4.3 ── HTTPS ── OpenCode Zen 무료 모델
+  ├─ SQLite FIFO + job event history
+  ├─ raw 사용자 입력 → 서버 소유 Synthetic 시나리오로 치환
+  │    ▼
+  │  OpenCode 1.4.3 ── HTTPS ── OpenCode Zen 무료 모델
+  └─ 사람 승인 → Claude 업무 worktree → 고정 테스트 → 사람 승인 → Git
 ```
 
-- 웹서버는 `AI_OFFICE_LOCAL_PROXY_ENABLED=1`인 개발 실행에서만 bridge를 사용한다. 호스팅 빌드는 결정론적 합성 데모만 반환한다.
+- 웹서버는 `AI_OFFICE_LOCAL_PROXY_ENABLED=1`일 때 bridge를 사용한다. production에서는 `AI_OFFICE_DEPLOYMENT_MODE=internal`과 `AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only`를 함께 요구한다.
 - bridge가 없거나 Zen 호출이 실패하면 명시적인 `5xx` 오류로 닫히며 호스팅 데모, 다른 모델 또는 provider로 fallback하지 않는다.
 - POC의 여섯 좌석은 업무 책임과 handoff를 표현하는 논리 에이전트다. 실제 실행은 요청당 OpenCode 프로세스 1개와 모델 턴 1개이며, 구조화 결과에 다섯 전문 역할과 오케스트레이터 결론을 함께 담는다.
-- 사내 전환 때 `AgentRuntime` 내부를 orchestrator 1개와 병렬 subagent fan-out으로 바꾸되, UI의 coarse progress event와 결과 schema는 유지한다.
+- 분석이 끝나면 `awaiting_coding_approval`, 구현·테스트가 끝나면 `changes_ready`에서 멈춘다. 두 승인 모두 optimistic version과 artifact digest를 검증한다.
+- Claude는 main checkout이 아니라 repository 밖 전용 worktree의 합성 `src/tests/config`만 수정한다. Push는 기본 비활성이다.
+- 사내 전환 때 기본 8GB 서버에서는 `research → framework → estimate → test → git → orchestrator` 순차 실행을 사용한다. 각 역할은 검증된 앞 단계 결과만 이어받고 progress event와 결과 schema를 유지한다. 자원이 충분한 서버에서만 의존성이 없는 단계를 제한적으로 병렬화한다.
 - 보안 예외와 만료 조건은 [SECURITY.md의 외부 OpenCode Zen 합성 POC 경계](./SECURITY.md#45-외부-opencode-zen-합성-poc-경계)를 따른다.
 
 ## 4. 배포 모드

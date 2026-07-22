@@ -14,7 +14,8 @@ sources:
     access: read_only
     export_raw_content: false
   repository:
-    access: read_only
+    analysis_access: read_only
+    coding_access: approved_worktree_only
     export_code_or_diff: false
   simulator_results:
     access: read_only
@@ -22,12 +23,27 @@ sources:
 
 git_write:
   enabled: true
-  allowed_actions: [create_issue]
+  allowed_actions: [create_issue, create_task_branch, commit_task_branch]
+  optional_actions: [push_task_branch]
   require_human_approval: always
-  required_approval_count: 2
+  required_approval_count: 1 # 개인 POC. 회사 정책이 요구하면 2로 올린다.
   bind_approval_to_canonical_draft_sha256: true
   approval_ttl_minutes: 30
-  deny_actions: [push, merge, delete, change_permissions]
+  deny_actions: [force_push, merge, delete, change_permissions]
+
+coding:
+  enabled: false # AI_OFFICE_CODING_ENABLED=1을 명시하기 전까지 닫는다.
+  workspace: dedicated_git_worktree
+  allowed_paths:
+    - poc/simulator/src
+    - poc/simulator/tests
+    - poc/simulator/config
+  model_tools: [read, edit, write, glob, grep]
+  denied_tools: [shell, network, git]
+  test_commands: [synthetic-python-unittest]
+  require_analysis_digest_approval: true
+  require_change_digest_approval: true
+  push_enabled: false
 
 execution:
   outbound_only_connector: true

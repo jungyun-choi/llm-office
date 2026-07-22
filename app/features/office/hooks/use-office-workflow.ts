@@ -1,317 +1,383 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createRequestId,
-  isPocAbortError,
-  runPocRequest,
-  type PocEndpoint,
-} from "../api/poc-client";
-import { mapPocRunResult } from "../api/map-poc-result";
-import { OFFICE_COPY } from "../copy";
-import { DEMO_WORKFLOW, REDUCED_MOTION_STAGE_DURATION_MS } from "../office-data";
+  createOfficeJob,
+  getOfficeJob,
+  getOfficeJobCapabilities,
+  listOfficeJobs,
+  runOfficeJobAction,
+} from "../api/job-client";
+import { getAnalysisResultPreviews, getJobAnalysisResult } from "../job-analysis";
 import type {
-  AgentId,
+  OfficeCapabilities,
+  OfficeConnectionMode,
+  OfficeJob,
+  OfficeJobAction,
   OfficeRequestInput,
   OfficeResult,
-  OfficeTask,
-  WorkflowStage,
-  WorkflowStatus,
+  OfficeResultPreview,
+  PublishMode,
 } from "../types";
-import { pruneOfficeTasks, restoreOfficeTasks, serializeOfficeTasks } from "../workflow-task-history";
-import { calculateWorkflowElapsedSeconds } from "../workflow-elapsed-time";
-import { useReducedMotion } from "./use-reduced-motion";
 
-const MAX_RESULTS = 3;
-const MAX_ACTIVE_TASKS = 10;
-const RESULT_ARRIVAL_DURATION_MS = 1_400;
-const ERROR_VISIBILITY_DURATION_MS = 1_500;
-const TASK_HISTORY_STORAGE_KEY = "ai-office:poc-task-history:v1";
+const DEFAULT_CAPABILITIES: OfficeCapabilities = { canCommit: false, canPush: false };
+const ACTIVE_POLL_MS = 1_000;
+const IDLE_POLL_MS = 5_000;
+const MAX_FAILURE_POLL_MS = 15_000;
 
-interface OfficeWorkflowOptions {
-  resolveEndpoint: () => Promise<PocEndpoint>;
-}
-
-interface OfficeWorkflowState {
-  status: WorkflowStatus;
-  stageIndex: number | null;
-  currentStage: WorkflowStage | null;
-  currentRequest: string | null;
-  results: readonly OfficeResult[];
+export interface OfficeWorkflowState {
+  jobs: readonly OfficeJob[];
+  focusJob: OfficeJob | null;
+  results: readonly OfficeResultPreview[];
   selectedResult: OfficeResult | null;
-  errorMessage: string | null;
-  isResultArriving: boolean;
-  elapsedSeconds: number;
-  tasks: readonly OfficeTask[];
-  errorAgentIds: readonly AgentId[];
-  queueErrorMessage: string | null;
-  startWorkflow: (input: OfficeRequestInput) => boolean;
-  cancelTask: (taskId: string) => void;
-  clearTaskHistory: () => void;
-  openResult: (result: OfficeResult) => void;
+  capabilities: OfficeCapabilities;
+  connectionMode: OfficeConnectionMode;
+  serverError: string | null;
+  actionError: string | null;
+  isSubmitting: boolean;
+  busyJobId: string | null;
+  startWorkflow: (input: OfficeRequestInput) => Promise<boolean>;
+  runAction: (job: OfficeJob, action: OfficeJobAction, mode?: PublishMode) => Promise<void>;
+  selectJob: (jobId: string) => void;
+  openResult: (result: OfficeResult | OfficeResultPreview) => void;
   closeResult: () => void;
+  retryConnection: () => void;
 }
 
-export function useOfficeWorkflow(options: OfficeWorkflowOptions): OfficeWorkflowState {
-  const { resolveEndpoint } = options;
-  const [status, setStatus] = useState<WorkflowStatus>("idle");
-  const [stageIndex, setStageIndex] = useState<number | null>(null);
-  const [currentRequest, setCurrentRequest] = useState<string | null>(null);
-  const [results, setResults] = useState<readonly OfficeResult[]>([]);
+export function useOfficeWorkflow(): OfficeWorkflowState {
+  const [jobs, setJobs] = useState<readonly OfficeJob[]>([]);
+  const [capabilities, setCapabilities] = useState(DEFAULT_CAPABILITIES);
+  const [connectionMode, setConnectionMode] = useState<OfficeConnectionMode>("checking");
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<OfficeResult | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isResultArriving, setIsResultArriving] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [tasks, setTasks] = useState<readonly OfficeTask[]>([]);
-  const [isTaskHistoryReady, setIsTaskHistoryReady] = useState(false);
-  const [errorAgentIds, setErrorAgentIds] = useState<readonly AgentId[]>([]);
-  const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(null);
-  const [isErrorPauseActive, setIsErrorPauseActive] = useState(false);
-  const submissionLockRef = useRef(false);
-  const requestControllerRef = useRef<AbortController | null>(null);
-  const currentTaskIdRef = useRef<string | null>(null);
-  const stageIndexRef = useRef<number | null>(null);
-  const pendingResultRef = useRef<OfficeResult | null>(null);
-  const finalDelayDoneRef = useRef(false);
-  const elapsedStartedAtRef = useRef<number | null>(null);
-  const prefersReducedMotion = useReducedMotion();
-  const closeResult = useCallback(() => setSelectedResult(null), []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [busyJobId, setBusyJobId] = useState<string | null>(null);
+  const listInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  const jobsRef = useRef<readonly OfficeJob[]>([]);
+  const detailRequestsRef = useRef(new Map<string, Promise<OfficeJob>>());
 
-  const failRequest = useCallback((error: unknown, controller: AbortController) => {
-    if (isPocAbortError(error) || requestControllerRef.current !== controller) return;
-    const message = getErrorMessage(error);
-    const failedAgentIds = getStageAgentIds(stageIndexRef.current);
-    const taskId = currentTaskIdRef.current;
-    requestControllerRef.current = null;
-    currentTaskIdRef.current = null;
-    submissionLockRef.current = false;
-    elapsedStartedAtRef.current = null;
-    setElapsedSeconds(0);
-    setStageIndex(null);
-    setErrorMessage(message);
-    setErrorAgentIds(failedAgentIds);
-    setIsErrorPauseActive(true);
-    if (taskId) {
-      setTasks((current) => pruneOfficeTasks(current.map((task) => task.id === taskId
-        ? { ...task, status: "failed", errorMessage: message, errorAgentIds: failedAgentIds }
-        : task)));
-    }
-    setStatus("error");
-  }, []);
-
-  const completeWorkflow = useCallback((result: OfficeResult) => {
-    if (!submissionLockRef.current) return;
-    const taskId = currentTaskIdRef.current;
-    submissionLockRef.current = false;
-    requestControllerRef.current = null;
-    currentTaskIdRef.current = null;
-    elapsedStartedAtRef.current = null;
-    setElapsedSeconds(0);
-    setResults((current) => [result, ...current].slice(0, MAX_RESULTS));
-    if (taskId) {
-      setTasks((current) => pruneOfficeTasks(current.map((task) => task.id === taskId
-        ? { ...task, status: "completed", result }
-        : task)));
-    }
-    setIsResultArriving(true);
-    setStatus("complete");
-  }, []);
-
-  const executeRequest = useCallback(async (request: string, controller: AbortController) => {
-    try {
-      const endpoint = await resolveEndpoint();
-      if (controller.signal.aborted) return;
-      const response = await runPocRequest(endpoint, request, controller.signal);
-      if (requestControllerRef.current !== controller) return;
-      const result = mapPocRunResult(response, request);
-      pendingResultRef.current = result;
-      if (finalDelayDoneRef.current) completeWorkflow(result);
-    } catch (error) {
-      failRequest(error, controller);
-    }
-  }, [completeWorkflow, failRequest, resolveEndpoint]);
-
-  const beginWorkflow = useCallback((task: OfficeTask): void => {
-    if (submissionLockRef.current) return;
+  const refreshJobs = useCallback(async (): Promise<boolean> => {
+    if (listInFlightRef.current) return true;
+    listInFlightRef.current = true;
     const controller = new AbortController();
-    submissionLockRef.current = true;
-    requestControllerRef.current = controller;
-    currentTaskIdRef.current = task.id;
-    setTasks((current) => current.map((candidate) => candidate.id === task.id
-      ? { ...candidate, status: "running", errorMessage: undefined, errorAgentIds: undefined }
-      : candidate));
-    setCurrentRequest(task.request);
-    setSelectedResult(null);
-    setIsResultArriving(false);
-    pendingResultRef.current = null;
-    finalDelayDoneRef.current = false;
-    elapsedStartedAtRef.current = Date.now();
-    setElapsedSeconds(0);
-    setErrorMessage(null);
-    setErrorAgentIds([]);
-    setQueueErrorMessage(null);
-    setStageIndex(0);
-    setStatus("running");
-    void executeRequest(task.request, controller);
-  }, [executeRequest]);
-
-  const startWorkflow = useCallback((input: OfficeRequestInput): boolean => {
-    const activeTaskCount = tasks.filter((task) => task.status === "pending" || task.status === "running").length;
-    if (activeTaskCount >= MAX_ACTIVE_TASKS) {
-      setQueueErrorMessage(OFFICE_COPY.queue.full);
-      return false;
-    }
-    const task: OfficeTask = {
-      id: `task-${createRequestId()}`,
-      request: input.request,
-      status: "pending",
-      submittedAt: new Date().toISOString(),
-    };
-    setTasks((current) => pruneOfficeTasks([...current, task]));
-    setQueueErrorMessage(null);
-    return true;
-  }, [tasks]);
-
-  const cancelTask = useCallback((taskId: string) => {
-    setTasks((current) => current.filter((task) => task.id !== taskId || task.status !== "pending"));
-    setQueueErrorMessage(null);
-  }, []);
-
-  const clearTaskHistory = useCallback(() => {
-    setTasks((current) => current.filter((task) => task.status === "pending" || task.status === "running"));
-    setResults([]);
-  }, []);
-
-  const finishFinalDelay = useCallback(() => {
-    finalDelayDoneRef.current = true;
-    const result = pendingResultRef.current;
-    if (result) completeWorkflow(result);
-  }, [completeWorkflow]);
-
-  useStageTimer(status, stageIndex, prefersReducedMotion, setStageIndex, finishFinalDelay);
-
-  useEffect(() => {
-    stageIndexRef.current = stageIndex;
-  }, [stageIndex]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      let restored: readonly OfficeTask[] = [];
-      try {
-        restored = restoreOfficeTasks(window.localStorage.getItem(TASK_HISTORY_STORAGE_KEY));
-      } catch {
-        // Some private browsing modes disable localStorage entirely.
-      }
-      setTasks((current) => pruneOfficeTasks([...restored, ...current]));
-      setResults(restored.flatMap((task) => task.result ? [task.result] : []).slice(-MAX_RESULTS).reverse());
-      setIsTaskHistoryReady(true);
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  useEffect(() => {
-    if (!isTaskHistoryReady) return;
     try {
-      window.localStorage.setItem(TASK_HISTORY_STORAGE_KEY, serializeOfficeTasks(tasks));
-    } catch {
-      // The synthetic POC keeps working even when browser storage is unavailable or full.
+      const payload = await listOfficeJobs(controller.signal);
+      if (!mountedRef.current) return false;
+      setJobs((current) => reconcilePolledJobs(current, payload.jobs));
+      if (payload.capabilities) setCapabilities(payload.capabilities);
+      setConnectionMode("server");
+      setServerError(null);
+      return true;
+    } catch (error) {
+      if (!mountedRef.current) return false;
+      setConnectionMode("disconnected");
+      setServerError(getErrorMessage(error));
+      return false;
+    } finally {
+      listInFlightRef.current = false;
     }
-  }, [isTaskHistoryReady, tasks]);
+  }, []);
+
+  const refreshCapabilities = useCallback(async () => {
+    const controller = new AbortController();
+    try {
+      const next = await getOfficeJobCapabilities(controller.signal);
+      if (mountedRef.current) setCapabilities(next);
+    } catch {
+      // Job-specific action flags remain the safe source of truth.
+    }
+  }, []);
+
+  const loadJobDetail = useCallback((jobId: string): Promise<OfficeJob> => {
+    const existing = detailRequestsRef.current.get(jobId);
+    if (existing) return existing;
+    const controller = new AbortController();
+    const request = getOfficeJob(jobId, controller.signal)
+      .then((detail) => {
+        if (mountedRef.current) setJobs((current) => mergeJobDetail(current, detail));
+        return detail;
+      })
+      .finally(() => {
+        if (detailRequestsRef.current.get(jobId) === request) {
+          detailRequestsRef.current.delete(jobId);
+        }
+      });
+    detailRequestsRef.current.set(jobId, request);
+    return request;
+  }, []);
+
+  const hasActiveJobs = jobs.some((job) => isPollingState(job.state));
+  useJobPolling(hasActiveJobs, refreshJobs);
 
   useEffect(() => {
-    if (!isTaskHistoryReady || submissionLockRef.current || isErrorPauseActive) return;
-    const nextTask = tasks.find((task) => task.status === "pending");
-    if (nextTask) beginWorkflow(nextTask);
-  }, [beginWorkflow, isErrorPauseActive, isTaskHistoryReady, tasks]);
-
-  useEffect(() => {
-    if (!isErrorPauseActive) return;
-    const timeoutId = window.setTimeout(() => setIsErrorPauseActive(false), ERROR_VISIBILITY_DURATION_MS);
+    const timeoutId = window.setTimeout(() => void refreshCapabilities(), 0);
     return () => window.clearTimeout(timeoutId);
-  }, [isErrorPauseActive]);
+  }, [refreshCapabilities]);
 
   useEffect(() => {
-    if (status !== "running") return;
-    const intervalId = window.setInterval(() => {
-      setElapsedSeconds(calculateWorkflowElapsedSeconds(
-        status,
-        elapsedStartedAtRef.current,
-        Date.now(),
-      ));
-    }, 1_000);
-    return () => window.clearInterval(intervalId);
-  }, [status]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!isResultArriving) return;
-    const timeoutId = window.setTimeout(
-      () => setIsResultArriving(false),
-      prefersReducedMotion ? REDUCED_MOTION_STAGE_DURATION_MS : RESULT_ARRIVAL_DURATION_MS,
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, [isResultArriving, prefersReducedMotion]);
+    jobsRef.current = jobs;
+  }, [jobs]);
 
-  useEffect(() => () => requestControllerRef.current?.abort(), []);
+  const startWorkflow = useCallback(async (input: OfficeRequestInput): Promise<boolean> => {
+    if (isSubmitting) return false;
+    setIsSubmitting(true);
+    setActionError(null);
+    const controller = new AbortController();
+    try {
+      const job = await createOfficeJob(input.request, controller.signal);
+      setJobs((current) => upsertJob(current, job));
+      setSelectedJobId(job.id);
+      setConnectionMode("server");
+      return true;
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting]);
+
+  const runAction = useCallback(async (
+    job: OfficeJob,
+    action: OfficeJobAction,
+    mode?: PublishMode,
+  ): Promise<void> => {
+    if (busyJobId) return;
+    setBusyJobId(job.id);
+    setActionError(null);
+    const controller = new AbortController();
+    try {
+      const updated = await runOfficeJobAction(job, action, mode, controller.signal);
+      setJobs((current) => upsertJob(current, updated));
+      setSelectedJobId(updated.id);
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusyJobId(null);
+    }
+  }, [busyJobId]);
+
+  const focusJob = useMemo(
+    () => jobs.find((job) => job.id === selectedJobId) ?? chooseFocusJob(jobs),
+    [jobs, selectedJobId],
+  );
+  const focusJobId = focusJob?.id;
+  const focusJobVersion = focusJob?.version;
+  const focusJobDetailLevel = focusJob?.detailLevel;
+  useEffect(() => {
+    if (!focusJobId || focusJobDetailLevel === "full") return;
+    void loadJobDetail(focusJobId).catch((error) => {
+      if (mountedRef.current) setActionError(getErrorMessage(error));
+    });
+  }, [focusJobDetailLevel, focusJobId, focusJobVersion, loadJobDetail]);
+
+  const results = useMemo(() => getAnalysisResultPreviews(jobs), [jobs]);
+  const openResult = useCallback((candidate: OfficeResult | OfficeResultPreview) => {
+    if (!("jobId" in candidate)) {
+      setSelectedResult(candidate);
+      return;
+    }
+    setSelectedJobId(candidate.jobId);
+    setActionError(null);
+    const known = jobsRef.current.find((job) => job.id === candidate.jobId);
+    const detail = known?.detailLevel === "full"
+      ? Promise.resolve(known)
+      : loadJobDetail(candidate.jobId);
+    void detail.then((job) => {
+      const result = getJobAnalysisResult(job);
+      if (!result) throw new Error("완료된 분석 결과를 불러오지 못했습니다.");
+      if (mountedRef.current) setSelectedResult(result);
+    }).catch((error) => {
+      if (mountedRef.current) setActionError(getErrorMessage(error));
+    });
+  }, [loadJobDetail]);
+  const closeResult = useCallback(() => setSelectedResult(null), []);
+  const retryConnection = useCallback(() => {
+    setConnectionMode("checking");
+    void refreshJobs();
+    void refreshCapabilities();
+  }, [refreshCapabilities, refreshJobs]);
 
   return {
-    status,
-    stageIndex,
-    currentStage: stageIndex === null ? null : DEMO_WORKFLOW[stageIndex],
-    currentRequest,
+    jobs,
+    focusJob,
     results,
     selectedResult,
-    errorMessage,
-    isResultArriving,
-    elapsedSeconds,
-    tasks,
-    errorAgentIds,
-    queueErrorMessage,
+    capabilities,
+    connectionMode,
+    serverError,
+    actionError,
+    isSubmitting,
+    busyJobId,
     startWorkflow,
-    cancelTask,
-    clearTaskHistory,
-    openResult: setSelectedResult,
+    runAction,
+    selectJob: setSelectedJobId,
+    openResult,
     closeResult,
+    retryConnection,
   };
 }
 
-function getStageAgentIds(stageIndex: number | null): readonly AgentId[] {
-  if (stageIndex === null) return ["orchestrator"];
-  const stage = DEMO_WORKFLOW[stageIndex];
-  return stage?.receiverIds.length ? stage.receiverIds : ["orchestrator"];
+function useJobPolling(hasActiveJobs: boolean, refreshJobs: () => Promise<boolean>): void {
+  useEffect(
+    () => startJobPolling(hasActiveJobs, refreshJobs, browserPollingRuntime),
+    [hasActiveJobs, refreshJobs],
+  );
 }
 
-function useStageTimer(
-  status: WorkflowStatus,
-  stageIndex: number | null,
-  reducedMotion: boolean,
-  setStageIndex: Dispatch<SetStateAction<number | null>>,
-  finishFinalDelay: () => void,
-): void {
-  useEffect(() => {
-    if (status !== "running" || stageIndex === null) return;
-    const stage = DEMO_WORKFLOW[stageIndex];
-    const delay = reducedMotion ? REDUCED_MOTION_STAGE_DURATION_MS : stage.durationMs;
-    const timeoutId = window.setTimeout(() => {
-      if (stageIndex < DEMO_WORKFLOW.length - 1) {
-        setStageIndex(stageIndex + 1);
-      } else {
-        finishFinalDelay();
-      }
-    }, delay);
-    return () => window.clearTimeout(timeoutId);
-  }, [finishFinalDelay, reducedMotion, setStageIndex, stageIndex, status]);
+/** @internal Exported for deterministic polling tests. */
+export interface JobPollingRuntime {
+  isVisible(): boolean;
+  setTimer(callback: () => void, delayMs: number): number;
+  clearTimer(timerId: number): void;
+  subscribeVisibility(callback: () => void): () => void;
+}
+
+const browserPollingRuntime: JobPollingRuntime = {
+  isVisible: () => document.visibilityState === "visible",
+  setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  subscribeVisibility: (callback) => {
+    document.addEventListener("visibilitychange", callback);
+    return () => document.removeEventListener("visibilitychange", callback);
+  },
+};
+
+/** @internal Exported for deterministic polling tests. */
+export function startJobPolling(
+  hasActiveJobs: boolean,
+  refreshJobs: () => Promise<boolean>,
+  runtime: JobPollingRuntime,
+): () => void {
+  let timeoutId: number | undefined;
+  let disposed = false;
+  let running = false;
+  let consecutiveFailures = 0;
+
+  const clearScheduled = () => {
+    if (timeoutId === undefined) return;
+    runtime.clearTimer(timeoutId);
+    timeoutId = undefined;
+  };
+  const schedule = (delayMs: number) => {
+    clearScheduled();
+    if (!disposed && runtime.isVisible()) {
+      timeoutId = runtime.setTimer(() => void tick(), delayMs);
+    }
+  };
+  const tick = async () => {
+    clearScheduled();
+    if (disposed || running || !runtime.isVisible()) return;
+    running = true;
+    let succeeded = false;
+    try {
+      succeeded = await refreshJobs();
+    } catch {
+      succeeded = false;
+    } finally {
+      running = false;
+    }
+    if (disposed || !runtime.isVisible()) return;
+    consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1;
+    schedule(getJobPollingDelay(hasActiveJobs, consecutiveFailures));
+  };
+  const handleVisibility = () => {
+    clearScheduled();
+    if (!disposed && runtime.isVisible() && !running) void tick();
+  };
+
+  const unsubscribeVisibility = runtime.subscribeVisibility(handleVisibility);
+  if (runtime.isVisible()) void tick();
+
+  return () => {
+    disposed = true;
+    clearScheduled();
+    unsubscribeVisibility();
+  };
+}
+
+/** @internal Exported for deterministic polling tests. */
+export function getJobPollingDelay(hasActiveJobs: boolean, consecutiveFailures: number): number {
+  const successDelay = hasActiveJobs ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+  if (consecutiveFailures <= 0) return successDelay;
+  return Math.min(
+    MAX_FAILURE_POLL_MS,
+    successDelay * (2 ** Math.min(consecutiveFailures - 1, 8)),
+  );
+}
+
+function isPollingState(state: OfficeJob["state"]): boolean {
+  return !["completed", "failed", "canceled", "awaiting_coding_approval", "changes_ready"].includes(state);
+}
+
+function chooseFocusJob(jobs: readonly OfficeJob[]): OfficeJob | null {
+  const priorities: readonly OfficeJob["state"][] = [
+    "awaiting_coding_approval", "changes_ready", "failed", "coding", "testing",
+    "publishing", "analyzing", "coding_queued", "queued", "completed", "canceled",
+  ];
+  for (const state of priorities) {
+    const job = jobs.find((candidate) => candidate.state === state);
+    if (job) return job;
+  }
+  return null;
+}
+
+function upsertJob(jobs: readonly OfficeJob[], next: OfficeJob): readonly OfficeJob[] {
+  const index = jobs.findIndex((job) => job.id === next.id);
+  if (index < 0) return [next, ...jobs];
+  return jobs.map((job) => job.id === next.id ? next : job);
+}
+
+/** @internal Exported for deterministic detail-loading tests. */
+export function mergeJobDetail(
+  current: readonly OfficeJob[],
+  detail: OfficeJob,
+): readonly OfficeJob[] {
+  const index = current.findIndex((job) => job.id === detail.id);
+  if (index < 0) return [detail, ...current];
+  const existing = current[index];
+  if (
+    existing.version !== undefined &&
+    detail.version !== undefined &&
+    existing.version > detail.version
+  ) return current;
+  if (existing === detail) return current;
+  return current.map((job, candidateIndex) => candidateIndex === index ? detail : job);
+}
+
+/** @internal Exported for deterministic polling tests. */
+export function reconcilePolledJobs(
+  current: readonly OfficeJob[],
+  incoming: readonly OfficeJob[],
+): readonly OfficeJob[] {
+  const currentById = new Map(current.map((job) => [job.id, job]));
+  let changed = current.length !== incoming.length;
+  const reconciled = incoming.map((next, index) => {
+    const previous = currentById.get(next.id);
+    const reusable = previous !== undefined &&
+      next.version !== undefined &&
+      previous.version === next.version &&
+      previous.queuePosition === next.queuePosition;
+    const job = reusable ? previous : next;
+    if (job !== current[index]) changed = true;
+    return job;
+  });
+  return changed ? reconciled : current;
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error && error.name === "PocClientError" && error.message
+  return error instanceof Error && error.message
     ? error.message
-    : OFFICE_COPY.progress.error;
+    : "단일 서버 요청을 처리하지 못했습니다.";
 }

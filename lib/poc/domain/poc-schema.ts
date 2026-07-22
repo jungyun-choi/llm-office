@@ -69,26 +69,25 @@ const issueDraftSchema = z
   })
   .strict();
 
+export const pocBriefSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    objective: z.string().trim().min(1).max(1_000),
+    scope: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    outOfScope: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    assumptions: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    workBreakdown: z.array(workItemSchema).min(1).max(16),
+    acceptanceCriteria: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    testStrategy: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    risks: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
+    issueDraft: issueDraftSchema,
+  })
+  .strict();
+
 export const pocModelOutputSchema = z
   .object({
     roleOutputs: z.array(roleOutputSchema).length(POC_AGENT_ROLES.length),
-    brief: z
-      .object({
-        title: z.string().trim().min(1).max(160),
-        objective: z.string().trim().min(1).max(1_000),
-        scope: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
-        outOfScope: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
-        assumptions: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
-        workBreakdown: z.array(workItemSchema).min(1).max(16),
-        acceptanceCriteria: z
-          .array(z.string().trim().min(1).max(600))
-          .min(1)
-          .max(16),
-        testStrategy: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
-        risks: z.array(z.string().trim().min(1).max(600)).min(1).max(16),
-        issueDraft: issueDraftSchema,
-      })
-      .strict(),
+    brief: pocBriefSchema,
   })
   .strict()
   .superRefine((output, context) => {

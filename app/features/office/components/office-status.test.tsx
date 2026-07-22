@@ -3,14 +3,18 @@ import test from "node:test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { OfficeEngineInfo, OfficeTask } from "../types";
+import type { OfficeAgent, OfficeCapabilities, OfficeEngineInfo, OfficeJob, OfficeTask } from "../types";
 import { pruneOfficeTasks, restoreOfficeTasks } from "../workflow-task-history";
-import { getAgentStateLabel } from "./agent-desk";
+import { AgentDesk, getAgentStateLabel } from "./agent-desk";
 import { OfficeHeader } from "./office-header";
 import { formatExecutionSummary, ResultEngineCard } from "./result-engine-card";
 import { getPocTruthLabel } from "./task-composer";
 import { TaskQueueHistory } from "./task-queue-history";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
+import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
+import { getDevelopmentStationState } from "./claude-office";
+import { AnalysisOffice, getAnalysisAgentState } from "./analysis-office";
+import { getAnalysisPhaseLabel } from "./analysis-stage-progress";
 import {
   calculateWorkflowElapsedSeconds,
   formatWorkflowElapsedTime,
@@ -25,7 +29,37 @@ const ZEN_ENGINE: OfficeEngineInfo = {
   roleOutputCount: 5,
 };
 
-test("mobile connection copy keeps the Zen state explicit", () => {
+const ORCHESTRATOR: OfficeAgent = {
+  id: "orchestrator",
+  name: "Orbit",
+  role: "오케스트레이터",
+  deskLabel: "ORBIT",
+  specialty: "업무 조율",
+  seat: "south",
+};
+
+const RESEARCH_AGENT: OfficeAgent = {
+  id: "research",
+  name: "DLD",
+  role: "리서처",
+  deskLabel: "DLD",
+  specialty: "자료 조사",
+  seat: "north-west",
+};
+
+test("agent desks expose stable identity and team rank selectors", () => {
+  const leadMarkup = renderToStaticMarkup(
+    <AgentDesk agent={ORCHESTRATOR} state="idle" activity="대기 중" />,
+  );
+  const memberMarkup = renderToStaticMarkup(
+    <AgentDesk agent={RESEARCH_AGENT} state="idle" activity="대기 중" />,
+  );
+
+  assert.match(leadMarkup, /<li[^>]+data-agent-id="orchestrator"[^>]+data-rank="lead"/u);
+  assert.match(memberMarkup, /<li[^>]+data-agent-id="research"[^>]+data-rank="member"/u);
+});
+
+test("mobile connection copy keeps the single-server state explicit", () => {
   const connected = renderToStaticMarkup(
     <OfficeHeader currentTime="10:42" connectionMode="opencode" onRetryConnection={() => undefined} />,
   );
@@ -34,9 +68,9 @@ test("mobile connection copy keeps the Zen state explicit", () => {
   );
 
   assert.match(connected, />ZEN 연결</u);
-  assert.match(disconnected, />ZEN 끊김</u);
+  assert.match(disconnected, />서버 끊김</u);
   assert.match(disconnected, /<button[^>]+data-mode="disconnected"/u);
-  assert.match(disconnected, /Zen 연결 다시 확인/u);
+  assert.match(disconnected, /서버 연결 다시 확인/u);
 });
 
 test("Zen POC truth copy identifies the single model call", () => {
@@ -71,42 +105,99 @@ test("elapsed time is formatted and reset outside a running workflow", () => {
   assert.equal(calculateWorkflowElapsedSeconds("running", null, 71_999), 0);
 });
 
-test("queue history exposes queued work and safe failure details", () => {
-  const tasks: readonly OfficeTask[] = [
+test("server queue exposes approval work and safe failure details", () => {
+  const jobs: readonly OfficeJob[] = [
     {
-      id: "task-running",
-      request: "첫 번째 작업을 분석해줘",
-      status: "running",
-      submittedAt: "2026-07-22T00:00:00.000Z",
+      ...createJob("job-running", "첫 번째 작업을 분석해줘", "analyzing"),
+      analysisStages: [
+        { id: "research", status: "completed" },
+        { id: "framework", status: "running" },
+        { id: "estimate", status: "pending" },
+        { id: "test", status: "pending" },
+        { id: "git", status: "pending" },
+        { id: "orchestrator", status: "pending" },
+      ],
     },
+    { ...createJob("job-pending", "두 번째 작업을 분석해줘", "queued"), queuePosition: 1 },
     {
-      id: "task-pending",
-      request: "두 번째 작업을 분석해줘",
-      status: "pending",
-      submittedAt: "2026-07-22T00:01:00.000Z",
-    },
-    {
-      id: "task-failed",
-      request: "실패한 작업",
-      status: "failed",
-      submittedAt: "2026-07-22T00:02:00.000Z",
-      errorMessage: "모델 응답 형식을 확인하지 못했습니다.",
+      ...createJob("job-failed", "실패한 작업", "failed"),
+      error: { code: "MODEL_OUTPUT", message: "모델 응답 형식을 확인하지 못했습니다." },
+      actions: { ...EMPTY_ACTIONS, retry: true },
     },
   ];
 
   const markup = renderToStaticMarkup(
     <TaskQueueHistory
-      tasks={tasks}
-      onResultOpen={() => undefined}
-      onTaskCancel={() => undefined}
-      onHistoryClear={() => undefined}
+      jobs={jobs}
+      busyJobId={null}
+      onSelect={() => undefined}
+      onAction={() => undefined}
     />,
   );
 
   assert.match(markup, /1건 대기/u);
   assert.match(markup, /첫 번째 작업을 분석해줘/u);
+  assert.match(markup, /1\/6 · 코드-X 작업 중/u);
   assert.match(markup, /모델 응답 형식을 확인하지 못했습니다/u);
   assert.equal(getAgentStateLabel("error"), "문제 발생");
+});
+
+test("coding approval is visible only at the explicit human gate", () => {
+  const awaiting = {
+    ...createJob("job-awaiting", "리드 버퍼를 늘려줘", "awaiting_coding_approval"),
+    actions: { ...EMPTY_ACTIONS, approveCoding: true },
+  };
+  const coding = { ...awaiting, state: "coding" as const };
+
+  assert.equal(canApproveCoding(awaiting), true);
+  assert.equal(canApproveCoding(coding), false);
+  assert.match(renderReviewDesk(awaiting), /Claude에게 구현 맡기기/u);
+  assert.doesNotMatch(renderReviewDesk(coding), /Claude에게 구현 맡기기/u);
+});
+
+test("Claude stations map coding, testing, and Git approval states", () => {
+  const coding = createJob("job-coding", "코딩 작업", "coding");
+  const testing = createJob("job-testing", "테스트 작업", "testing");
+  const changesReady = createJob("job-ready", "검토 작업", "changes_ready");
+
+  assert.equal(getDevelopmentStationState("implementation", coding), "working");
+  assert.equal(getDevelopmentStationState("implementation", testing), "complete");
+  assert.equal(getDevelopmentStationState("verification", testing), "working");
+  assert.equal(getDevelopmentStationState("publisher", changesReady), "waiting");
+});
+
+test("company analysis progress activates only the current specialist", () => {
+  const job: OfficeJob = {
+    ...createJob("job-company", "회사 기능을 깊게 분석해줘", "analyzing"),
+    analysisStages: [
+      { id: "research", status: "completed", summary: "DLD 근거 정리 완료" },
+      {
+        id: "framework",
+        status: "running",
+        phase: "calling_model",
+        startedAt: "2026-07-22T00:00:01.000Z",
+        attempt: 2,
+      },
+      { id: "estimate", status: "pending" },
+      { id: "test", status: "pending" },
+      { id: "git", status: "pending" },
+      { id: "orchestrator", status: "pending" },
+    ],
+  };
+
+  assert.equal(getAnalysisAgentState("research", job), "complete");
+  assert.equal(getAnalysisAgentState("framework", job), "receiving");
+  assert.equal(getAnalysisAgentState("estimate", job), "idle");
+  assert.equal(getAnalysisAgentState("orchestrator", job), "idle");
+  assert.equal(getAnalysisPhaseLabel("preparing_context"), "컨텍스트 준비");
+  assert.equal(getAnalysisPhaseLabel("calling_model"), "사내 LLM 응답 대기");
+  assert.equal(getAnalysisPhaseLabel("validating_output"), "결과 검증");
+
+  const markup = renderToStaticMarkup(<AnalysisOffice job={job} runtimeLabel="CodeLLMPro" />);
+  assert.match(markup, /1\/6 · 코드-X 진행/u);
+  assert.match(markup, /사내 LLM 응답 대기/u);
+  assert.match(markup, /경과 계산 중/u);
+  assert.match(markup, /2차 시도/u);
 });
 
 test("stored running work returns to the FIFO and terminal history is bounded", () => {
@@ -151,3 +242,40 @@ test("stored running work returns to the FIFO and terminal history is bounded", 
     tooManyPending.slice(0, 10).map((task) => task.id),
   );
 });
+
+const EMPTY_ACTIONS: OfficeJob["actions"] = {
+  approveCoding: false,
+  cancel: false,
+  retry: false,
+  publishCommit: false,
+  publishAndPush: false,
+};
+
+const CAPABILITIES: OfficeCapabilities = {
+  canCommit: true,
+  canPush: false,
+};
+
+function createJob(id: string, prompt: string, state: OfficeJob["state"]): OfficeJob {
+  return {
+    id,
+    prompt,
+    state,
+    createdAt: "2026-07-22T00:00:00.000Z",
+    analysisStages: [],
+    events: [],
+    actions: EMPTY_ACTIONS,
+  };
+}
+
+function renderReviewDesk(job: OfficeJob): string {
+  return renderToStaticMarkup(
+    <ReviewDispatchDesk
+      job={job}
+      capabilities={CAPABILITIES}
+      busy={false}
+      onAction={() => undefined}
+      onAnalysisOpen={() => undefined}
+    />,
+  );
+}
