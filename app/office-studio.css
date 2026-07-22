@@ -876,6 +876,11 @@
     padding: 24px 20px 40px;
   }
 
+  .company-operations__header {
+    align-items: flex-start;
+    text-align: left;
+  }
+
   .company-operations__lanes {
     gap: 12px;
     padding: 10px;
