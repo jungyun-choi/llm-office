@@ -2220,6 +2220,169 @@ textarea:focus-visible {
   to { transform: translateX(0); }
 }
 
+/* Desktop readability: the office is a workspace, not a miniature map. */
+@media (min-width: 901px) {
+  .office-brand small {
+    font-size: 10px;
+  }
+
+  .connection-status,
+  .office-clock {
+    min-height: 36px;
+    font-size: 12px;
+  }
+
+  .office-room__header > span,
+  .task-composer__heading span,
+  .result-vault header small,
+  .task-queue-history > header span,
+  .task-queue-history__section-label {
+    font-size: 10px;
+  }
+
+  .office-room__header h1 {
+    font-size: clamp(28px, 2.35vw, 34px);
+    line-height: 1.16;
+    text-wrap: balance;
+  }
+
+  .office-room__header p {
+    font-size: 13px;
+  }
+
+  .agent-station__label > div {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .agent-station__label > div > span {
+    font-size: 10px;
+  }
+
+  .agent-station__label strong {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+
+  .agent-station__label small {
+    grid-column: 1 / -1;
+    overflow: visible;
+    font-size: 12px;
+    line-height: 1.35;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .agent-station__content > p {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.45;
+    text-overflow: clip;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .collaboration-table strong {
+    font-size: 12px;
+  }
+
+  .collaboration-table small {
+    font-size: 10px;
+  }
+
+  .handoff-caption__step {
+    font-size: 10px;
+  }
+
+  .handoff-caption strong {
+    font-size: 13px;
+  }
+
+  .handoff-caption p,
+  .workflow-elapsed-status > span {
+    font-size: 12px;
+  }
+
+  .workflow-elapsed-status > time {
+    font-size: 13px;
+  }
+
+  .workflow-elapsed-status > small {
+    font-size: 11px;
+  }
+
+  .handoff-caption__result-button {
+    min-height: 42px;
+    font-size: 12px;
+  }
+
+  .task-queue-history > header strong {
+    font-size: 14px;
+  }
+
+  .task-queue-history > header small,
+  .task-queue-history li small,
+  .task-queue-history li em {
+    font-size: 11px;
+  }
+
+  .task-queue-history__empty,
+  .task-queue-history li strong,
+  .task-queue-history li p {
+    font-size: 12px;
+  }
+
+  .task-queue-history__section-heading button,
+  .task-queue-history__cancel {
+    min-height: 32px;
+    font-size: 11px;
+  }
+
+  .result-vault header strong {
+    font-size: 14px;
+  }
+
+  .result-vault__incoming,
+  .result-vault__empty p,
+  .result-stack button > span:nth-child(2) > span {
+    font-size: 11px;
+  }
+
+  .result-vault__empty strong,
+  .result-stack {
+    font-size: 12px;
+  }
+
+  .task-composer__heading label {
+    font-size: 17px;
+  }
+
+  .task-composer__heading > small {
+    font-size: 11px;
+  }
+
+  .poc-truth-note {
+    font-size: 13px;
+  }
+
+  .task-composer textarea {
+    font-size: 16px;
+  }
+
+  .task-composer__field > button {
+    min-height: 50px;
+    font-size: 13px;
+  }
+
+  .task-composer__hint,
+  .task-composer__error {
+    min-height: 17px;
+    font-size: 11px;
+  }
+}
+
 @media (max-width: 1180px) and (min-width: 901px) {
   .agent-station {
     width: 160px;
