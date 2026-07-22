@@ -66,7 +66,7 @@ export const OFFICE_COPY = {
   },
   floor: {
     eyebrow: "AI OFFICE · LIVE COMPANY",
-    title: "업무를 맡기면, 세 팀이 나눠 처리합니다",
+    title: "AI 개발 오피스",
     idleTask: "새 업무를 기다리고 있어요",
     taskLabel: "현재 업무",
     collaborationTable: "중앙 협업 테이블",

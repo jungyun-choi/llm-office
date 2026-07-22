@@ -20,21 +20,21 @@ const TEAM_DEFINITIONS = [
   {
     id: "analysis",
     eyebrow: "TEAM A · OPENCODE",
-    title: "분석팀",
+    title: "OpenCode 분석실",
     description: "DLD · 코드 · TopView 근거 조사",
     icon: BrainCircuit,
   },
   {
     id: "review",
     eyebrow: "TEAM B · HUMAN",
-    title: "사용자 검토팀",
+    title: "사용자 검토실",
     description: "구현 승인 · Git 승인 · PR 최종 검토",
     icon: UserRoundCheck,
   },
   {
     id: "development",
     eyebrow: "TEAM C · CLAUDE",
-    title: "개발팀",
+    title: "Claude 개발실",
     description: "코드 수정 · 테스트 · Git 게시",
     icon: Code2,
   },
@@ -65,9 +65,9 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
       <header className="company-operations__header">
         <div>
           <span>LIVE COMPANY</span>
-          <h2 id="company-operations-title">세 팀이 각자의 업무를 동시에 처리합니다</h2>
+          <h2 id="company-operations-title">실시간 오피스</h2>
         </div>
-        <p>업무는 분석팀에서 시작해 사용자 검토를 거쳐 개발팀으로 전달됩니다. 각 팀의 대기열은 독립적으로 움직입니다.</p>
+        <p>분석 · 검토 · 개발</p>
       </header>
       <div className="company-operations__lanes">
         {TEAM_DEFINITIONS.map((team, index) => {
@@ -134,6 +134,7 @@ function HumanReviewFileStack(props: {
   now?: number;
 }) {
   const visibleJobs = props.jobs.slice(0, 4);
+  const selectedFile = visibleJobs.find((job) => job.id === props.selectedJobId);
   return (
     <div className="human-bottleneck" data-level={props.snapshot.level}>
       <div className="human-bottleneck__summary">
@@ -149,24 +150,46 @@ function HumanReviewFileStack(props: {
         <div className="human-review-room__person" aria-hidden="true"><span /><i /></div>
         <div className="human-review-room__desk" aria-hidden="true"><span /></div>
         {visibleJobs.length > 0 ? (
-          <ol className="human-file-stack" aria-label="사람 검토 대기 파일철">
-            {visibleJobs.map((job, index) => (
-              <li
-                key={job.id}
-                data-selected={job.id === props.selectedJobId ? "true" : "false"}
-                style={{ "--file-index": index } as CSSProperties}
-              >
-                <button type="button" onClick={() => props.onSelect(job.id)}>
-                  <span className="human-file-stack__tab">{getHumanGateLabel(job.state)}</span>
-                  <strong>{job.prompt}</strong>
-                  <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
-                </button>
-              </li>
-            ))}
-            {props.jobs.length > visibleJobs.length && (
-              <li className="human-file-stack__overflow">+{props.jobs.length - visibleJobs.length}개</li>
-            )}
-          </ol>
+          <>
+            <ol className="human-file-stack" aria-label="사람 검토 대기 파일철">
+              {visibleJobs.map((job, index) => (
+                <li
+                  key={job.id}
+                  data-selected={job.id === props.selectedJobId ? "true" : "false"}
+                  style={{ "--file-index": index } as CSSProperties}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={job.id === props.selectedJobId}
+                    onClick={() => props.onSelect(job.id)}
+                  >
+                    <span className="human-file-stack__tab">{getHumanGateLabel(job.state)}</span>
+                    <strong>{job.prompt}</strong>
+                    <small>{formatHumanWait(job, props.now)} · {getTeamActivity(job)}</small>
+                  </button>
+                </li>
+              ))}
+              {props.jobs.length > visibleJobs.length && (
+                <li className="human-file-stack__overflow">+{props.jobs.length - visibleJobs.length}개</li>
+              )}
+            </ol>
+            <div className="human-file-preview" data-open={selectedFile ? "true" : "false"} aria-live="polite">
+              {selectedFile ? (
+                <>
+                  <span>{getHumanGateLabel(selectedFile.state)}</span>
+                  <strong>{selectedFile.prompt}</strong>
+                  <p>{getTeamActivity(selectedFile)}</p>
+                  <small>{formatHumanWait(selectedFile, props.now)} · 아래 작업실에도 열렸습니다.</small>
+                </>
+              ) : (
+                <>
+                  <span>FILE PREVIEW</span>
+                  <strong>서류를 선택하세요</strong>
+                  <p>책상 위 파일을 누르면 상세 내용이 펼쳐집니다.</p>
+                </>
+              )}
+            </div>
+          </>
         ) : (
           <p className="company-team-lane__empty">책상 위가 비어 있습니다</p>
         )}

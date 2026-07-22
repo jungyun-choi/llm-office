@@ -203,7 +203,7 @@ test("company board assigns simultaneous work to independent teams", () => {
   const markup = renderToStaticMarkup(
     <CompanyOperationsBoard
       jobs={[analysis, review, coding]}
-      selectedJobId={coding.id}
+      selectedJobId={review.id}
       onSelect={() => undefined}
     />,
   );
@@ -211,11 +211,13 @@ test("company board assigns simultaneous work to independent teams", () => {
   assert.equal(getCompanyTeam(analysis), "analysis");
   assert.equal(getCompanyTeam(review), "review");
   assert.equal(getCompanyTeam(coding), "development");
-  assert.match(markup, /세 팀이 각자의 업무를 동시에 처리합니다/u);
+  assert.match(markup, /실시간 오피스/u);
   assert.match(markup, /DLD와 TopView를 분석해줘/u);
   assert.match(markup, /구현 패킷을 검토해줘/u);
   assert.match(markup, /REVIEW FILES/u);
   assert.match(markup, /사람 검토 대기 파일철/u);
+  assert.match(markup, /aria-pressed="true"/u);
+  assert.match(markup, /아래 작업실에도 열렸습니다/u);
   assert.match(markup, /Read buffer 코드를 수정해줘/u);
   assert.match(markup, /data-selected="true"/u);
 });

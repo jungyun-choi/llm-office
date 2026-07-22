@@ -70,8 +70,7 @@ export function OfficeFloor(props: OfficeFloorProps) {
       />
       <div className="office-section-heading">
         <span>SELECTED WORKSPACE</span>
-        <strong>선택 업무의 팀별 작업 공간</strong>
-        <p>위 현황판에서 업무를 선택하면 세 팀이 맡은 상세 내용이 함께 바뀝니다.</p>
+        <strong>선택 업무 작업실</strong>
       </div>
       <div className="office-campus__grid">
         <AnalysisOffice job={props.focusJob} runtimeLabel={runtime.analysisRuntimeLabel} />
@@ -86,8 +85,7 @@ export function OfficeFloor(props: OfficeFloorProps) {
       </div>
       <div className="office-section-heading office-section-heading--records">
         <span>WORK LOG</span>
-        <strong>대기 업무와 완료 기록</strong>
-        <p>업무가 늘어나면 이 아래로 자연스럽게 쌓입니다.</p>
+        <strong>업무 기록실</strong>
       </div>
       <div className="office-campus__operations">
         <TaskQueueHistory

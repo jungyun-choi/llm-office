@@ -32,7 +32,7 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
     <section className="review-dispatch" aria-labelledby="review-dispatch-title" data-state={props.job?.state ?? "empty"}>
       <header>
         <small>TEAM B · HUMAN REVIEW</small>
-        <h2 id="review-dispatch-title">사용자 검토팀</h2>
+        <h2 id="review-dispatch-title">사용자 검토실</h2>
         <p>구현 승인부터 Git 반영, PR 최종 결정까지 당신이 담당합니다.</p>
       </header>
       <div className="review-packet" aria-hidden="true">
