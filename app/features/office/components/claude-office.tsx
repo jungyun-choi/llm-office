@@ -70,9 +70,9 @@ export function getDevelopmentStationState(
 }
 
 function getClaudeLeadState(state: OfficeJob["state"]): DevelopmentFlowState {
-  if (state === "awaiting_coding_approval" || state === "changes_ready") return "waiting";
+  if (["awaiting_coding_approval", "changes_ready", "review_pending"].includes(state)) return "waiting";
   if (state === "coding_queued") return "queued";
-  if (["coding", "testing", "publishing"].includes(state)) return "working";
+  if (["coding", "testing", "publishing", "merging"].includes(state)) return "working";
   if (state === "completed") return "complete";
   return "idle";
 }
@@ -80,19 +80,21 @@ function getClaudeLeadState(state: OfficeJob["state"]): DevelopmentFlowState {
 function getImplementationState(state: OfficeJob["state"]): DevelopmentFlowState {
   if (state === "coding_queued") return "queued";
   if (state === "coding") return "working";
-  if (["testing", "changes_ready", "publishing", "completed"].includes(state)) return "complete";
+  if (["testing", "changes_ready", "publishing", "review_pending", "merging", "completed"].includes(state)) return "complete";
   return "idle";
 }
 
 function getVerificationState(state: OfficeJob["state"]): DevelopmentFlowState {
   if (state === "testing") return "working";
-  if (["changes_ready", "publishing", "completed"].includes(state)) return "complete";
+  if (["changes_ready", "publishing", "review_pending", "merging", "completed"].includes(state)) return "complete";
   return "idle";
 }
 
 function getPublisherState(state: OfficeJob["state"]): DevelopmentFlowState {
   if (state === "changes_ready") return "waiting";
   if (state === "publishing") return "working";
+  if (state === "review_pending") return "waiting";
+  if (state === "merging") return "working";
   if (state === "completed") return "complete";
   return "idle";
 }
@@ -109,15 +111,19 @@ function getClaudeOfficeState(job: OfficeJob | null): string {
   if (!job || ["queued", "analyzing"].includes(job.state)) return "업무 수령 대기";
   if (job.state === "awaiting_coding_approval") return "사용자 승인 대기";
   if (job.state === "changes_ready") return "Git 승인 대기";
+  if (job.state === "review_pending") return "PR 최종 검토 대기";
+  if (job.state === "merging") return "PR 머지 중";
   if (job.state === "completed") return "업무 완료";
   if (job.state === "failed" && job.coding) return "문제 발생";
-  return ["coding_queued", "coding", "testing", "publishing"].includes(job.state) ? "작업 중" : "대기";
+  return ["coding_queued", "coding", "testing", "publishing", "merging"].includes(job.state) ? "작업 중" : "대기";
 }
 
 function getClaudeActivity(job: OfficeJob | null): string {
   if (!job) return "검토 데스크의 구현 승인을 기다립니다";
   if (job.state === "awaiting_coding_approval") return "구현 패킷은 도착했지만 아직 코드를 건드리지 않습니다";
   if (job.state === "changes_ready") return "변경과 테스트를 마치고 Git 승인을 기다립니다";
+  if (job.state === "review_pending") return "PR이 준비되어 사용자의 최종 코드 검토를 기다립니다";
+  if (job.state === "merging") return "사용자의 최종 승인에 따라 PR을 머지하고 있습니다";
   if (job.state === "failed") return job.error?.message ?? "개발 단계에서 작업이 멈췄습니다";
   return job.coding?.summary ?? "허용된 작업 공간에서 구현을 진행합니다";
 }

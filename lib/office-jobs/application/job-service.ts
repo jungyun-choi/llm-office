@@ -21,6 +21,10 @@ import {
   BUNDLED_EXECUTOR_VERSION,
   SYNTHETIC_TEST_COMMAND_ID,
 } from "../infrastructure/job-config";
+import {
+  hasConfiguredIssuePublisher,
+  loadExtensionIssuePublisher,
+} from "../../poc/infrastructure/extension-issue-publisher";
 
 const TERMINAL_STATES = new Set<JobState>(["completed", "failed", "canceled"]);
 const RUNNING_STATES = new Set<JobState>(["analyzing", "coding", "testing", "publishing"]);
@@ -93,6 +97,7 @@ export class JobService {
       diffTruncated: false,
       testStatus: "not_run",
       testOutputTruncated: false,
+      reviewRound: 0,
       cancelRequested: false,
       attempts: 0,
     };
@@ -142,10 +147,19 @@ export class JobService {
       return { job: this.get(jobId), duplicate: true };
     }
     const current = this.requireVersion(jobId, input.expectedVersion);
+    if (input.action === "merge_pr") {
+      return this.mergePullRequest(current, input.artifactDigest, {
+        jobId,
+        idempotencyKey,
+        fingerprint,
+      });
+    }
     let patch: Partial<JobRecord>;
     if (input.action === "approve_coding") patch = this.approveCoding(current, input.artifactDigest);
     else if (input.action === "publish_changes") {
       patch = this.queuePublishing(current, input.artifactDigest, input.mode);
+    } else if (input.action === "request_changes") {
+      patch = await this.requestChanges(current, input.feedback);
     } else if (input.action === "cancel") patch = this.cancel(current);
     else patch = this.retry(current);
 
@@ -278,6 +292,13 @@ export class JobService {
         },
         commitSha: record.commitSha,
         publishMode: record.requestedPublishMode,
+        pullRequestUrl: record.pullRequestUrl,
+        pullRequestNumber: record.pullRequestNumber,
+        pullRequestError: record.pullRequestError,
+        reviewFeedback: record.reviewFeedback,
+        reviewRound: record.reviewRound,
+        issueUrl: record.issueUrl,
+        issueError: record.issueError,
       },
       error: record.error,
       actions: this.availableActions(record, record.queueOrder !== undefined),
@@ -312,6 +333,12 @@ export class JobService {
         },
         commitSha: record.commitSha,
         publishMode: record.requestedPublishMode,
+        pullRequestUrl: record.pullRequestUrl,
+        pullRequestNumber: record.pullRequestNumber,
+        pullRequestError: record.pullRequestError,
+        reviewRound: record.reviewRound,
+        issueUrl: record.issueUrl,
+        issueError: record.issueError,
       },
       error: record.error,
       actions: this.availableActions(record, record.queuePosition !== undefined),
@@ -319,19 +346,24 @@ export class JobService {
   }
 
   private availableActions(
-    record: Pick<JobRecord, "state" | "testStatus" | "diffTruncated" | "error">,
+    record: Pick<JobRecord, "state" | "testStatus" | "diffTruncated" | "error" | "pullRequestUrl" | "pullRequestNumber" | "changesDigest">,
     queuedForExecution: boolean,
   ): JobDto["actions"] {
     const testPassed = record.testStatus === "passed";
     return {
       approveCoding: record.state === "awaiting_coding_approval" && this.config.codingEnabled,
       cancel: !TERMINAL_STATES.has(record.state) &&
+        record.state !== "merging" &&
         !(record.state === "publishing" && !queuedForExecution),
       retry: (record.state === "failed" && Boolean(record.error?.retryable)) ||
         (record.state === "changes_ready" && !testPassed) || record.state === "canceled",
       publishCommit: record.state === "changes_ready" && testPassed && !record.diffTruncated,
       publishAndPush: record.state === "changes_ready" && testPassed &&
         !record.diffTruncated && this.config.pushEnabled,
+      requestChanges: record.state === "review_pending",
+      mergePr: record.state === "review_pending" && Boolean(
+        record.pullRequestUrl && record.pullRequestNumber && record.changesDigest && this.config.githubToken,
+      ),
     };
   }
 
@@ -387,7 +419,7 @@ export class JobService {
       throw new JobError("PUSH_DISABLED", "Git push가 비활성화되어 있습니다.", 403, false);
     }
     return {
-      state: "publishing",
+      state: "merging",
       queueOrder: this.repository.nextQueueOrder(),
       requestedPublishMode: mode,
       updatedAt: new Date().toISOString(),
@@ -396,12 +428,159 @@ export class JobService {
     };
   }
 
+  private async requestChanges(current: JobRecord, feedback: string): Promise<Partial<JobRecord>> {
+    if (current.state !== "review_pending" || !current.commitSha || !current.codingPacket) {
+      throw invalidAction("최종 코드 검토 중인 PR만 개발팀에 재의뢰할 수 있습니다.");
+    }
+    const packetWithoutDigest = {
+      schemaVersion: current.codingPacket.schemaVersion,
+      generatedAt: new Date().toISOString(),
+      sourceCommit: current.commitSha,
+      allowedPaths: current.codingPacket.allowedPaths,
+      request: current.codingPacket.request,
+      brief: current.codingPacket.brief,
+      roleOutputs: current.codingPacket.roleOutputs,
+      analysisRunId: current.codingPacket.analysisRunId,
+      executionPolicy: current.codingPacket.executionPolicy,
+    };
+    const codingPacket = {
+      ...packetWithoutDigest,
+      digest: await digest(JSON.stringify(packetWithoutDigest)),
+    };
+    return {
+      state: "coding_queued",
+      queueOrder: this.repository.nextQueueOrder(),
+      baseSha: current.commitSha,
+      codingPacket,
+      reviewFeedback: feedback.trim(),
+      reviewRound: current.reviewRound + 1,
+      claudeOutput: undefined,
+      changedFiles: [],
+      diff: undefined,
+      diffTruncated: false,
+      changesDigest: undefined,
+      changesManifest: undefined,
+      testStatus: "not_run",
+      testOutput: undefined,
+      testOutputTruncated: false,
+      requestedPublishMode: undefined,
+      commitSha: undefined,
+      pullRequestError: undefined,
+      issueUrl: undefined,
+      issueError: undefined,
+      updatedAt: new Date().toISOString(),
+      error: undefined,
+      cancelRequested: false,
+    };
+  }
+
+  private async mergePullRequest(
+    current: JobRecord,
+    artifactDigest: string,
+    action: { jobId: string; idempotencyKey: string; fingerprint: string },
+  ): Promise<{ job: JobDto; duplicate: boolean }> {
+    if (current.state !== "review_pending" || !current.pullRequestUrl || !current.pullRequestNumber) {
+      throw invalidAction("최종 코드 검토 중이며 PR 링크가 있는 업무만 머지할 수 있습니다.");
+    }
+    if (!current.changesDigest || current.changesDigest !== artifactDigest) throw artifactConflict();
+    const startedAt = new Date().toISOString();
+    let started = this.repository.updateWithAction(current.id, current.version, {
+      state: "publishing",
+      queueOrder: undefined,
+      updatedAt: startedAt,
+      error: undefined,
+    }, action);
+    this.repository.appendEvent(current.id, {
+      kind: "action",
+      state: started.state,
+      message: "사용자가 PR 최종 머지를 승인했습니다.",
+      createdAt: startedAt,
+    });
+    try {
+      await this.executor.mergePullRequest(started);
+      started = this.repository.update(started.id, started.version, {
+        state: "completed",
+        updatedAt: new Date().toISOString(),
+        error: undefined,
+      });
+      this.repository.appendEvent(started.id, {
+        kind: "state",
+        state: started.state,
+        message: "PR 머지를 완료했습니다.",
+        createdAt: started.updatedAt,
+      });
+      const completed = await this.publishCompletedIssue(started);
+      return { job: this.toDto(completed), duplicate: false };
+    } catch (error) {
+      const latest = this.repository.get(started.id) ?? started;
+      const snapshot = toErrorSnapshot(error, "publishing");
+      const restored = this.repository.update(latest.id, latest.version, {
+        state: "review_pending",
+        updatedAt: new Date().toISOString(),
+        error: snapshot,
+      });
+      this.repository.appendEvent(restored.id, {
+        kind: "error",
+        state: restored.state,
+        message: snapshot.message,
+        createdAt: restored.updatedAt,
+      });
+      return { job: this.toDto(restored), duplicate: false };
+    }
+  }
+
+  async publishCompletedIssue(job: JobRecord): Promise<JobRecord> {
+    if (job.state !== "completed" || job.issueUrl || !job.analysis || !job.changesDigest) return job;
+    if (!(await hasConfiguredIssuePublisher())) return job;
+    try {
+      const publisher = await loadExtensionIssuePublisher();
+      const published = await publisher.publish(job.analysis, {
+        artifactDigest: job.changesDigest,
+        idempotencyKey: job.id,
+        commitSha: job.commitSha,
+        branchName: job.branchName,
+        pushed: job.requestedPublishMode === "commit_and_push",
+      });
+      const issueUrl = safeHttpsUrl(published.issueUrl);
+      if (!issueUrl) throw new Error("invalid issue URL");
+      const latest = this.repository.get(job.id) ?? job;
+      const updated = this.repository.update(latest.id, latest.version, {
+        issueUrl,
+        issueError: undefined,
+        updatedAt: new Date().toISOString(),
+      });
+      this.repository.appendEvent(updated.id, {
+        kind: "state",
+        state: updated.state,
+        message: "완료된 변경을 Git 이슈로 등록했습니다.",
+        createdAt: updated.updatedAt,
+      });
+      return updated;
+    } catch {
+      const latest = this.repository.get(job.id) ?? job;
+      const updated = this.repository.update(latest.id, latest.version, {
+        issueError: "Git 이슈 등록에 실패했습니다. 코드 반영 결과에는 영향이 없습니다.",
+        updatedAt: new Date().toISOString(),
+      });
+      this.repository.appendEvent(updated.id, {
+        kind: "error",
+        state: updated.state,
+        message: updated.issueError ?? "Git 이슈 등록에 실패했습니다.",
+        createdAt: updated.updatedAt,
+      });
+      return updated;
+    }
+  }
+
   private cancel(current: JobRecord): Partial<JobRecord> {
     if (TERMINAL_STATES.has(current.state)) {
       return { updatedAt: new Date().toISOString() };
     }
     if (current.state === "publishing" && current.queueOrder === undefined) {
       throw invalidAction("게시가 시작된 뒤에는 취소할 수 없습니다.");
+    }
+    if (current.state === "merging") {
+      throw invalidAction("PR 머지가 시작된 뒤에는 취소할 수 없습니다.");
     }
     const running = RUNNING_STATES.has(current.state) && current.queueOrder === undefined;
     return {
@@ -478,8 +657,21 @@ function artifactConflict(): JobError {
 function actionMessage(action: JobActionInput["action"]): string {
   if (action === "approve_coding") return "사용자가 Claude 코딩을 승인했습니다.";
   if (action === "publish_changes") return "사용자가 변경 게시를 승인했습니다.";
+  if (action === "request_changes") return "사용자가 PR 리뷰 피드백과 함께 재개발을 요청했습니다.";
+  if (action === "merge_pr") return "사용자가 PR 최종 머지를 승인했습니다.";
   if (action === "cancel") return "사용자가 업무 취소를 요청했습니다.";
   return "사용자가 업무 재시도를 요청했습니다.";
+}
+
+function safeHttpsUrl(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeWhitespace(value: string): string {

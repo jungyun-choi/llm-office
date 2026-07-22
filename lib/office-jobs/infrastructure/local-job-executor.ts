@@ -20,6 +20,7 @@ import {
   BUNDLED_EXECUTOR_VERSION,
   SYNTHETIC_TEST_COMMAND_ID,
 } from "./job-config";
+import { GitHubPullRequestClient } from "./github-pull-request-client";
 
 const ALLOWED_CLAUDE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"] as const;
 const GIT_TIMEOUT_MS = 30_000;
@@ -41,8 +42,11 @@ let claudeAvailabilityCache: { checkedAt: number; executable?: string } | undefi
 
 export class LocalJobExecutor implements JobExecutionPort {
   private readonly analysisService = new PocRunService({ allowCompanyExtensions: true });
+  private readonly pullRequests: GitHubPullRequestClient;
 
-  constructor(private readonly config: JobRuntimeConfig) {}
+  constructor(private readonly config: JobRuntimeConfig) {
+    this.pullRequests = new GitHubPullRequestClient(config);
+  }
 
   async resolveBaseSha(signal?: AbortSignal): Promise<string> {
     const result = await this.git(["rev-parse", "HEAD"], this.config.repositoryRoot, signal);
@@ -209,7 +213,10 @@ export class LocalJobExecutor implements JobExecutionPort {
     if (currentHead !== job.baseSha) {
       const existingCommit = await this.validateExistingCommit(job, workspace, currentHead, signal);
       if (mode === "commit_and_push") await this.pushCommit(job, workspace, existingCommit, signal);
-      return { commitSha: existingCommit, mode };
+      const pullRequest = mode === "commit_and_push"
+        ? await this.pullRequests.create(job, signal)
+        : {};
+      return { commitSha: existingCommit, mode, ...pullRequest };
     }
     const changes = await this.collectChangedFiles(workspace, signal);
     if (changes.ignored.length > 0) {
@@ -243,7 +250,14 @@ export class LocalJobExecutor implements JobExecutionPort {
     const commitSha = (await this.git(["rev-parse", "HEAD"], workspace, signal)).stdout.trim();
     if (!SHA_PATTERN.test(commitSha)) throw executionError("COMMIT_FAILED", "생성된 커밋을 확인하지 못했습니다.", "publishing", false);
     if (mode === "commit_and_push") await this.pushCommit(job, workspace, commitSha, signal);
-    return { commitSha, mode };
+    const pullRequest = mode === "commit_and_push"
+      ? await this.pullRequests.create(job, signal)
+      : {};
+    return { commitSha, mode, ...pullRequest };
+  }
+
+  async mergePullRequest(job: JobRecord, signal?: AbortSignal): Promise<void> {
+    await this.pullRequests.merge(job, signal);
   }
 
   async cleanup(job: JobRecord): Promise<void> {
@@ -514,12 +528,13 @@ function claudeArguments(config: JobRuntimeConfig): string[] {
 export function buildClaudePrompt(job: JobRecord, config: JobRuntimeConfig): string {
   const packet = job.codingPacket;
   if (!packet) throw executionError("INVALID_CODING_PACKET", "코딩 패킷이 없습니다.", "coding", false);
-  const payload = {
+    const payload = {
     deterministicFeatureSpec: packet.request.normalizedFeature,
     sourceCommit: packet.sourceCommit,
     allowedPaths: packet.allowedPaths,
     executorVersion: packet.executionPolicy.executorVersion,
-    testCommandId: packet.executionPolicy.testCommandId,
+      testCommandId: packet.executionPolicy.testCommandId,
+      reviewFeedback: job.reviewFeedback,
     constraints: [
       "Python standard library only",
       "deterministic behavior",

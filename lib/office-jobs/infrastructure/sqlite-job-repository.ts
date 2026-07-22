@@ -23,6 +23,8 @@ const ACTIVE_STATES = [
   "testing",
   "changes_ready",
   "publishing",
+  "review_pending",
+  "merging",
 ] as const;
 
 type SqlValue = string | number | bigint | null;
@@ -51,6 +53,7 @@ export class SqliteJobRepository implements JobRepository {
       `SELECT * FROM office_jobs
        WHERE state IN ('analyzing','coding','testing')
           OR (state = 'publishing' AND queue_order IS NULL)
+          OR state = 'merging'
           OR cancel_requested = 1`,
     ).all() as DatabaseRow[];
     for (const row of interrupted) {
@@ -72,6 +75,21 @@ export class SqliteJobRepository implements JobRepository {
           updatedAt: now,
         });
         this.appendEvent(job.id, recoveryEvent(recovered, "분석 업무를 대기열로 복구했습니다.", now));
+        continue;
+      }
+      if (job.state === "merging") {
+        const recovered = this.update(job.id, job.version, {
+          state: "review_pending",
+          queueOrder: undefined,
+          updatedAt: now,
+          error: {
+            code: "MERGE_STATUS_UNKNOWN",
+            message: "서버 재시작으로 PR 머지 결과를 확정하지 못했습니다. GitHub에서 상태를 확인해 주세요.",
+            retryable: true,
+            stage: "publishing",
+          },
+        });
+        this.appendEvent(job.id, recoveryEvent(recovered, "PR 머지 상태를 사람 검토 단계로 복구했습니다.", now));
         continue;
       }
       const recovered = this.update(job.id, job.version, {
@@ -97,9 +115,11 @@ export class SqliteJobRepository implements JobRepository {
         analysis_stages_json, coding_packet_json, base_sha, worktree_path, branch_name, claude_model,
         claude_output, changed_files_json, diff_text, diff_truncated,
         changes_digest, changes_manifest_json, test_status, test_output, test_output_truncated,
-        requested_publish_mode, commit_sha, error_json, cancel_requested, attempts
+        requested_publish_mode, commit_sha, pull_request_url, pull_request_number,
+        pull_request_error, review_feedback, review_round, issue_url, issue_error,
+        error_json, cancel_requested, attempts
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(...jobValues(record));
     return record;
@@ -150,6 +170,12 @@ export class SqliteJobRepository implements JobRepository {
           test_output_truncated,
           requested_publish_mode,
           commit_sha,
+          pull_request_url,
+          pull_request_number,
+          pull_request_error,
+          review_round,
+          issue_url,
+          issue_error,
           error_json
         FROM office_jobs
         ORDER BY created_at DESC, id DESC
@@ -243,7 +269,9 @@ export class SqliteJobRepository implements JobRepository {
           analysis_stages_json = ?, coding_packet_json = ?, base_sha = ?, worktree_path = ?, branch_name = ?, claude_model = ?,
           claude_output = ?, changed_files_json = ?, diff_text = ?, diff_truncated = ?,
           changes_digest = ?, changes_manifest_json = ?, test_status = ?, test_output = ?, test_output_truncated = ?,
-          requested_publish_mode = ?, commit_sha = ?, error_json = ?, cancel_requested = ?, attempts = ?
+          requested_publish_mode = ?, commit_sha = ?, pull_request_url = ?, pull_request_number = ?,
+          pull_request_error = ?, review_feedback = ?, review_round = ?, issue_url = ?, issue_error = ?,
+          error_json = ?, cancel_requested = ?, attempts = ?
         WHERE id = ? AND version = ?
     `).run(...jobValues(next).slice(1), id, expectedVersion);
     assertOneChange(result);
@@ -326,6 +354,13 @@ export class SqliteJobRepository implements JobRepository {
         test_output_truncated INTEGER NOT NULL DEFAULT 0,
         requested_publish_mode TEXT,
         commit_sha TEXT,
+        pull_request_url TEXT,
+        pull_request_number INTEGER,
+        pull_request_error TEXT,
+        review_feedback TEXT,
+        review_round INTEGER NOT NULL DEFAULT 0,
+        issue_url TEXT,
+        issue_error TEXT,
         error_json TEXT,
         cancel_requested INTEGER NOT NULL DEFAULT 0,
         attempts INTEGER NOT NULL DEFAULT 0
@@ -362,6 +397,13 @@ export class SqliteJobRepository implements JobRepository {
       "changes_manifest_json",
       "ALTER TABLE office_jobs ADD COLUMN changes_manifest_json TEXT",
     );
+    this.ensureColumn("pull_request_url", "ALTER TABLE office_jobs ADD COLUMN pull_request_url TEXT");
+    this.ensureColumn("pull_request_number", "ALTER TABLE office_jobs ADD COLUMN pull_request_number INTEGER");
+    this.ensureColumn("pull_request_error", "ALTER TABLE office_jobs ADD COLUMN pull_request_error TEXT");
+    this.ensureColumn("review_feedback", "ALTER TABLE office_jobs ADD COLUMN review_feedback TEXT");
+    this.ensureColumn("review_round", "ALTER TABLE office_jobs ADD COLUMN review_round INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("issue_url", "ALTER TABLE office_jobs ADD COLUMN issue_url TEXT");
+    this.ensureColumn("issue_error", "ALTER TABLE office_jobs ADD COLUMN issue_error TEXT");
   }
 
   private ensureColumn(name: string, statement: string): void {
@@ -412,6 +454,13 @@ function jobValues(record: JobRecord): SqlValue[] {
     record.testOutputTruncated ? 1 : 0,
     record.requestedPublishMode ?? null,
     record.commitSha ?? null,
+    record.pullRequestUrl ?? null,
+    record.pullRequestNumber ?? null,
+    record.pullRequestError ?? null,
+    record.reviewFeedback ?? null,
+    record.reviewRound,
+    record.issueUrl ?? null,
+    record.issueError ?? null,
     jsonValue(record.error),
     record.cancelRequested ? 1 : 0,
     record.attempts,
@@ -448,6 +497,13 @@ function rowToJob(row: DatabaseRow): JobRecord {
     testOutputTruncated: numberValue(row.test_output_truncated) === 1,
     requestedPublishMode: optionalString(row.requested_publish_mode) as JobRecord["requestedPublishMode"],
     commitSha: optionalString(row.commit_sha),
+    pullRequestUrl: optionalString(row.pull_request_url),
+    pullRequestNumber: optionalNumber(row.pull_request_number),
+    pullRequestError: optionalString(row.pull_request_error),
+    reviewFeedback: optionalString(row.review_feedback),
+    reviewRound: numberValue(row.review_round),
+    issueUrl: optionalString(row.issue_url),
+    issueError: optionalString(row.issue_error),
     error: parseJson(row.error_json),
     cancelRequested: numberValue(row.cancel_requested) === 1,
     attempts: numberValue(row.attempts),
@@ -490,6 +546,12 @@ function rowToListJob(row: DatabaseRow): JobListRecord {
     testOutputTruncated: numberValue(row.test_output_truncated) === 1,
     requestedPublishMode: optionalString(row.requested_publish_mode) as JobRecord["requestedPublishMode"],
     commitSha: optionalString(row.commit_sha),
+    pullRequestUrl: optionalString(row.pull_request_url),
+    pullRequestNumber: optionalNumber(row.pull_request_number),
+    pullRequestError: optionalString(row.pull_request_error),
+    reviewRound: numberValue(row.review_round),
+    issueUrl: optionalString(row.issue_url),
+    issueError: optionalString(row.issue_error),
     error: parseJson(row.error_json),
   };
 }

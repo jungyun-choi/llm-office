@@ -28,6 +28,9 @@ export interface TestExecutionResult {
 export interface PublishExecutionResult {
   commitSha: string;
   mode: PublishMode;
+  pullRequestUrl?: string;
+  pullRequestNumber?: number;
+  pullRequestError?: string;
 }
 
 export interface JobExecutionPort {
@@ -47,5 +50,6 @@ export interface JobExecutionPort {
     mode: PublishMode,
     signal?: AbortSignal,
   ): Promise<PublishExecutionResult>;
+  mergePullRequest(job: JobRecord, signal?: AbortSignal): Promise<void>;
   cleanup(job: JobRecord): Promise<void>;
 }

@@ -24,6 +24,8 @@ const jobStateSchema = z.enum([
   "testing",
   "changes_ready",
   "publishing",
+  "review_pending",
+  "merging",
   "completed",
   "failed",
   "canceled",
@@ -167,6 +169,13 @@ function normalizeCoding(value: unknown): OfficeCodingResult | undefined {
     commitSha: readString(record, ["commitSha", "commit_sha"]),
     pushed: readBoolean(record, ["pushed"], false) || publishMode === "commit_and_push",
     changesDigest: readString(record, ["changesDigest", "changes_digest"]),
+    pullRequestUrl: readHttpsUrl(record, ["pullRequestUrl", "pull_request_url"]),
+    pullRequestNumber: readNumber(record, ["pullRequestNumber", "pull_request_number"]),
+    pullRequestError: readString(record, ["pullRequestError", "pull_request_error"]),
+    reviewFeedback: readString(record, ["reviewFeedback", "review_feedback"]),
+    reviewRound: readNumber(record, ["reviewRound", "review_round"]) ?? 0,
+    issueUrl: readHttpsUrl(record, ["issueUrl", "issue_url"]),
+    issueError: readString(record, ["issueError", "issue_error"]),
   };
 }
 
@@ -178,6 +187,8 @@ function normalizeActions(value: unknown): OfficeJobActions {
     retry: record ? readBoolean(record, ["retry"], false) : false,
     publishCommit: record ? readBoolean(record, ["publishCommit", "publish_commit"], false) : false,
     publishAndPush: record ? readBoolean(record, ["publishAndPush", "publish_and_push"], false) : false,
+    requestChanges: record ? readBoolean(record, ["requestChanges", "request_changes"], false) : false,
+    mergePr: record ? readBoolean(record, ["mergePr", "merge_pr"], false) : false,
   };
 }
 
@@ -267,6 +278,19 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function readString(record: Record<string, unknown>, keys: readonly string[]): string | undefined {
   for (const key of keys) if (typeof record[key] === "string" && record[key]) return record[key];
   return undefined;
+}
+
+function readHttpsUrl(record: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  const value = readString(record, keys);
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readNumber(record: Record<string, unknown>, keys: readonly string[]): number | undefined {

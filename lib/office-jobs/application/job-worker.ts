@@ -187,18 +187,25 @@ export class JobWorker {
         return;
       }
       if (signal.aborted) throw new Error("worker stopped");
+      const awaitingReview = published.mode === "commit_and_push";
       current = this.repository.update(current.id, current.version, {
-        state: "completed",
+        state: awaitingReview ? "review_pending" : "completed",
         updatedAt: new Date().toISOString(),
         commitSha: published.commitSha,
+        pullRequestUrl: published.pullRequestUrl ?? current.pullRequestUrl,
+        pullRequestNumber: published.pullRequestNumber ?? current.pullRequestNumber,
+        pullRequestError: published.pullRequestError,
       });
       this.event(
         current,
         "state",
-        published.mode === "commit_and_push"
-          ? "커밋과 원격 브랜치 게시를 완료했습니다."
+        awaitingReview
+          ? published.pullRequestUrl
+            ? "원격 브랜치와 PR이 준비되었습니다. 최종 코드 검토를 기다립니다."
+            : "원격 브랜치는 게시됐지만 PR 자동 생성에 실패했습니다. 설정을 확인해 주세요."
           : "검토된 변경을 작업 브랜치에 커밋했습니다.",
       );
+      if (!awaitingReview) current = await this.service.publishCompletedIssue(current);
     } catch (error) {
       const commitSha = commitShaFromError(error);
       const latest = this.repository.get(job.id);

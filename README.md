@@ -134,6 +134,11 @@ npm run dev:office -- -H "$(tailscale ip -4)"
 후 `Commit`을 각각 눌러야 다음 단계가 실행됩니다. Push까지 시험할 때만 신뢰할 수 있는
 합성 저장소에서 `AI_OFFICE_GIT_PUSH_ENABLED=1`을 명시합니다.
 
+`Commit + Push 승인`을 선택한 업무는 Push로 끝나지 않습니다. 서버가 PR을 만들고 화면에
+두 번째 휴먼 게이트인 `PR 최종 코드 검토`를 표시합니다. GitHub 링크에서 구현과 리뷰
+코멘트를 확인한 뒤 Claude에게 재개발을 요청하거나 최종 머지를 승인할 수 있습니다.
+회사 설정과 상태 흐름은 [Dual Office 실행 흐름](docs/DUAL_OFFICE_WORKFLOW.md)을 참고하세요.
+
 ### OpenCode Zen 무료 모델로 합성 POC 실행
 
 8GB Mac에서 로컬 LLM을 띄우지 않고 OpenCode 1.4.3의 Zen 무료 모델을 원격 호출합니다. POC 기본 모델은 실호출 검증을 통과한 `opencode/deepseek-v4-flash-free`입니다. 로컬 bridge는 loopback에만 바인딩되고, 모바일 브라우저는 웹서버의 same-origin API만 호출합니다.

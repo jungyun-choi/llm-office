@@ -14,6 +14,9 @@ const ISSUE_CONTRACT_VERSION = "ai-office-company-issue-v1";
 export interface IssuePublishContext {
   artifactDigest: string;
   idempotencyKey: string;
+  commitSha?: string;
+  branchName?: string;
+  pushed?: boolean;
 }
 
 export interface IssuePublisher {
@@ -26,9 +29,8 @@ export interface IssuePublisher {
 type IssuePublisherFactory = () => IssuePublisher | Promise<IssuePublisher>;
 
 /**
- * Loads and validates the trusted publisher adapter only. Publication stays
- * disabled until the Job API has a digest-bound human approval action and a
- * reconciliation contract.
+ * Loads and validates the trusted publisher adapter. Job publication is only
+ * invoked after the human-reviewed commit or PR merge reaches `completed`.
  */
 export async function loadExtensionIssuePublisher(): Promise<IssuePublisher> {
   try {

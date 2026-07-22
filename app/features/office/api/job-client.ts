@@ -9,6 +9,7 @@ import type {
 
 const JOBS_API_BASE = "/api/v1/jobs";
 const REQUEST_TIMEOUT_MS = 12_000;
+const ACTION_REQUEST_TIMEOUT_MS = 45_000;
 
 export async function listOfficeJobs(signal: AbortSignal): Promise<{
   jobs: readonly OfficeJob[];
@@ -45,14 +46,18 @@ export async function runOfficeJobAction(
   job: OfficeJob,
   action: OfficeJobAction,
   mode: PublishMode | undefined,
+  feedback: string | undefined,
   signal: AbortSignal,
 ): Promise<OfficeJob> {
   const artifactDigest = action === "approve_coding"
     ? job.codingPacketDigest
-    : job.coding?.changesDigest;
+    : action === "publish_changes" || action === "merge_pr"
+      ? job.coding?.changesDigest
+      : undefined;
   const body = {
     action,
     ...(mode ? { mode } : {}),
+    ...(feedback ? { feedback } : {}),
     ...(job.version === undefined ? {} : { expectedVersion: job.version }),
     ...(artifactDigest ? { artifactDigest } : {}),
   };
@@ -60,7 +65,7 @@ export async function runOfficeJobAction(
     method: "POST",
     headers: createMutationHeaders(),
     body: JSON.stringify(body),
-  }, signal);
+  }, signal, ACTION_REQUEST_TIMEOUT_MS);
   return parseJobPayload(payload);
 }
 
@@ -71,11 +76,16 @@ function createMutationHeaders(): Headers {
   });
 }
 
-async function requestJson(url: string, init: RequestInit, parentSignal: AbortSignal): Promise<unknown> {
+async function requestJson(
+  url: string,
+  init: RequestInit,
+  parentSignal: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<unknown> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   parentSignal.addEventListener("abort", abort, { once: true });
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       ...init,

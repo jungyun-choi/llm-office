@@ -9,6 +9,8 @@ export const JOB_STATES = [
   "testing",
   "changes_ready",
   "publishing",
+  "review_pending",
+  "merging",
   "completed",
   "failed",
   "canceled",
@@ -110,6 +112,13 @@ export interface JobRecord {
   testOutputTruncated: boolean;
   requestedPublishMode?: PublishMode;
   commitSha?: string;
+  pullRequestUrl?: string;
+  pullRequestNumber?: number;
+  pullRequestError?: string;
+  reviewFeedback?: string;
+  reviewRound: number;
+  issueUrl?: string;
+  issueError?: string;
   error?: JobErrorSnapshot;
   cancelRequested: boolean;
   attempts: number;
@@ -155,6 +164,12 @@ export interface JobListRecord {
   testOutputTruncated: boolean;
   requestedPublishMode?: PublishMode;
   commitSha?: string;
+  pullRequestUrl?: string;
+  pullRequestNumber?: number;
+  pullRequestError?: string;
+  reviewRound: number;
+  issueUrl?: string;
+  issueError?: string;
   error?: JobErrorSnapshot;
 }
 
@@ -197,6 +212,13 @@ export interface JobDto {
     };
     commitSha?: string;
     publishMode?: PublishMode;
+    pullRequestUrl?: string;
+    pullRequestNumber?: number;
+    pullRequestError?: string;
+    reviewFeedback?: string;
+    reviewRound: number;
+    issueUrl?: string;
+    issueError?: string;
   };
   error?: JobErrorSnapshot;
   actions: {
@@ -205,6 +227,8 @@ export interface JobDto {
     retry: boolean;
     publishCommit: boolean;
     publishAndPush: boolean;
+    requestChanges: boolean;
+    mergePr: boolean;
   };
   events: JobEvent[];
 }
@@ -235,6 +259,12 @@ export interface JobListItemDto {
     };
     commitSha?: string;
     publishMode?: PublishMode;
+    pullRequestUrl?: string;
+    pullRequestNumber?: number;
+    pullRequestError?: string;
+    reviewRound: number;
+    issueUrl?: string;
+    issueError?: string;
   };
   error?: JobErrorSnapshot;
   actions: JobDto["actions"];

@@ -138,6 +138,8 @@ function createJob(
       retry: false,
       publishCommit: false,
       publishAndPush: false,
+      requestChanges: false,
+      mergePr: false,
     },
     version,
   };

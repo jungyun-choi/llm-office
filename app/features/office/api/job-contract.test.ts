@@ -32,6 +32,9 @@ const BASE_JOB = {
     diff: "--- /Users/person/work/simulator/src/read-buffer.cc\n+++ b/src/read-buffer.cc",
     diffTruncated: false,
     changesDigest: "changes-digest",
+    reviewRound: 2,
+    pullRequestUrl: "https://github.example.test/test/simulator/pull/4",
+    pullRequestNumber: 4,
     test: { status: "passed", output: "ok", truncated: false },
   },
   actions: {
@@ -40,6 +43,8 @@ const BASE_JOB = {
     retry: false,
     publishCommit: true,
     publishAndPush: false,
+    requestChanges: false,
+    mergePr: false,
   },
   events: [{ id: 1, kind: "state", state: "changes_ready", message: "검토 준비", createdAt: "2026-07-22T00:01:00.000Z" }],
 };
@@ -54,6 +59,8 @@ test("bare and wrapped JobDTO responses are normalized", () => {
   assert.equal(bare.codingPacketDigest, "packet-digest");
   assert.equal(bare.coding?.changesDigest, "changes-digest");
   assert.equal(bare.coding?.test?.status, "passed");
+  assert.equal(bare.coding?.pullRequestNumber, 4);
+  assert.equal(bare.coding?.reviewRound, 2);
   assert.deepEqual(bare.analysisStages.map(({ id, status }) => ({ id, status })), [
     { id: "research", status: "completed" },
     { id: "framework", status: "running" },

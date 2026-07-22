@@ -10,8 +10,10 @@ const SYNTHETIC_ALLOWED_ROOTS = [
 const DEFAULT_ALLOWED_PATHS = SYNTHETIC_ALLOWED_ROOTS.join(",");
 const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_ACTIVE_JOBS = 50;
+const DEFAULT_GITHUB_API_BASE = "https://github.samsungds.net/api/v3/repos/LOUVRE/nike_nvme";
 const MODEL_PATTERN = /^[a-zA-Z0-9_.:/-]{1,160}$/u;
 const RELATIVE_PATH_PATTERN = /^[a-zA-Z0-9._/-]{1,240}$/u;
+const GIT_REF_PATTERN = /^[a-zA-Z0-9._/-]{1,160}$/u;
 export const BUNDLED_EXECUTOR_VERSION = "bundled-synthetic-v2";
 export const SYNTHETIC_TEST_COMMAND_ID = "python-unittest-isolated-v1";
 
@@ -34,6 +36,9 @@ export interface JobRuntimeConfig {
   testOutputLimitBytes: number;
   maxActiveJobs: number;
   pushEnabled: boolean;
+  githubToken?: string;
+  githubApiBase: string;
+  githubBaseBranch: string;
   internalExecutionAcknowledged: boolean;
 }
 
@@ -91,6 +96,9 @@ export function getJobRuntimeConfig(): JobRuntimeConfig {
       500,
     ),
     pushEnabled: process.env.AI_OFFICE_GIT_PUSH_ENABLED === "1",
+    githubToken: readSecret(process.env.AI_OFFICE_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN),
+    githubApiBase: parseGithubApiBase(process.env.AI_OFFICE_GITHUB_API_BASE),
+    githubBaseBranch: parseGitRef(process.env.AI_OFFICE_GITHUB_BASE_BRANCH),
     internalExecutionAcknowledged,
   };
 }
@@ -179,6 +187,32 @@ function isFilesystemWithin(parent: string, candidate: string): boolean {
 
 function parseModel(value: string | undefined): string {
   return value && MODEL_PATTERN.test(value) ? value : "sonnet";
+}
+
+function parseGithubApiBase(value: string | undefined): string {
+  const candidate = value ?? DEFAULT_GITHUB_API_BASE;
+  try {
+    const parsed = new URL(candidate);
+    if (
+      parsed.protocol !== "https:" || parsed.username || parsed.password ||
+      parsed.search || parsed.hash || !/\/repos\/[^/]+\/[^/]+\/?$/u.test(parsed.pathname)
+    ) return DEFAULT_GITHUB_API_BASE;
+    return parsed.toString().replace(/\/$/u, "");
+  } catch {
+    return DEFAULT_GITHUB_API_BASE;
+  }
+}
+
+function parseGitRef(value: string | undefined): string {
+  if (!value || !GIT_REF_PATTERN.test(value) || value.includes("..") || value.startsWith("/")) {
+    return "develop";
+  }
+  return value;
+}
+
+function readSecret(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 8_192 ? trimmed : undefined;
 }
 
 function parseAbsoluteExecutable(value: string | undefined): string | undefined {

@@ -155,6 +155,14 @@ AI_OFFICE_CODING_ENABLED=0
 
 AI_OFFICE_DATA_DIR=/var/lib/ai-office
 AI_OFFICE_GIT_PUSH_ENABLED=0
+
+# 회사 coding executor 포팅과 GitHub 서비스 계정 준비 후에만 설정한다.
+AI_OFFICE_GITHUB_TOKEN=<repo-scoped-service-token>
+AI_OFFICE_GITHUB_API_BASE=https://github.samsungds.net/api/v3/repos/LOUVRE/nike_nvme
+AI_OFFICE_GITHUB_BASE_BRANCH=develop
+
+AI_OFFICE_ISSUE_PUBLISHER_MODULE=/srv/company-workspace/nike_nvme/deps/ai-office-issue.mjs
+AI_OFFICE_ISSUE_PUBLISHER_MODULE_SHA256=<issue-module-sha256-64-hex>
 ```
 
 전용 auth 파일은 workspace 밖의 절대 경로, 서비스 계정 소유, 정확히 `0600`이어야 한다.
@@ -330,6 +338,11 @@ capabilities에서 확인할 값:
 - 합성 POC에서는 `dataPolicy.syntheticOnly=true`
 - 기본값은 `publishing.pushEnabled=false`
 
+Push를 활성화하면 승인된 변경을 업무 브랜치에 게시한 뒤 PR을 만들고 Job은
+`review_pending`에서 멈춘다. 화면의 `PR 보기`로 GitHub 구현과 clinko 리뷰를 확인하고,
+`개발팀에 재의뢰`로 피드백을 Claude에 전달하거나 `최종 머지 승인`으로 끝낸다. 이슈 자동등록은
+PR 머지 후 `completed`에 도달한 시점에만 실행된다.
+
 ## 7. 장애 대응
 
 | 증상 | 확인할 것 |
@@ -341,6 +354,8 @@ capabilities에서 확인할 값:
 | 업무가 `failed` | 화면의 안전한 오류 code/stage, bridge 로그, 재시도 가능 여부 |
 | 테스트 실패 | 변경 Diff와 고정 테스트 출력 확인 후 수정 업무를 다시 요청 |
 | Commit은 됐지만 Push 실패 | job의 commit SHA 확인 후 credential/branch 권한을 고치고 재시도 |
+| Push는 됐지만 PR 링크가 없음 | `AI_OFFICE_GITHUB_TOKEN`, API base, base branch와 PR 생성 권한 확인 |
+| PR 머지 승인 실패 | GitHub의 clinko/maintainer 리뷰, branch protection, merge 가능 상태 확인 |
 | 재시작 후 실행 중 업무 중단 | 안전하게 `failed`로 복구; 확인 후 명시적 retry, 대기 업무는 FIFO 유지 |
 | 디스크 증가 | 완료 worktree 보존 정책을 확인하고 승인된 정리 절차 사용 |
 

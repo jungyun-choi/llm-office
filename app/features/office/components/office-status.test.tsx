@@ -155,6 +155,31 @@ test("coding approval is visible only at the explicit human gate", () => {
   assert.doesNotMatch(renderReviewDesk(coding), /Claude에게 구현 맡기기/u);
 });
 
+test("final PR review is rendered as a second human gate", () => {
+  const reviewJob: OfficeJob = {
+    ...createJob("job-pr-review", "PR 최종 검토", "review_pending"),
+    coding: {
+      changedFiles: [],
+      diffTruncated: false,
+      reviewRound: 1,
+      changesDigest: "d".repeat(64),
+      pullRequestUrl: "https://github.example.test/test/simulator/pull/12",
+      pullRequestNumber: 12,
+    },
+    actions: {
+      ...EMPTY_ACTIONS,
+      requestChanges: true,
+      mergePr: true,
+    },
+  };
+
+  const markup = renderReviewDesk(reviewJob);
+  assert.match(markup, /HUMAN GATE 2 · FINAL CODE REVIEW/u);
+  assert.match(markup, /PR #12 GitHub에서 보기/u);
+  assert.match(markup, /개발팀에 재의뢰/u);
+  assert.match(markup, /최종 머지 승인/u);
+});
+
 test("Claude stations map coding, testing, and Git approval states", () => {
   const coding = createJob("job-coding", "코딩 작업", "coding");
   const testing = createJob("job-testing", "테스트 작업", "testing");
@@ -249,6 +274,8 @@ const EMPTY_ACTIONS: OfficeJob["actions"] = {
   retry: false,
   publishCommit: false,
   publishAndPush: false,
+  requestChanges: false,
+  mergePr: false,
 };
 
 const CAPABILITIES: OfficeCapabilities = {

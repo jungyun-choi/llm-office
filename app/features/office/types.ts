@@ -29,11 +29,19 @@ export type OfficeJobState =
   | "testing"
   | "changes_ready"
   | "publishing"
+  | "review_pending"
+  | "merging"
   | "completed"
   | "failed"
   | "canceled";
 
-export type OfficeJobAction = "approve_coding" | "publish_changes" | "cancel" | "retry";
+export type OfficeJobAction =
+  | "approve_coding"
+  | "publish_changes"
+  | "request_changes"
+  | "merge_pr"
+  | "cancel"
+  | "retry";
 export type PublishMode = "commit" | "commit_and_push";
 export type OfficeConnectionMode = "checking" | "server" | "disconnected";
 export type DevelopmentStationId = "claude" | "implementation" | "verification" | "publisher";
@@ -165,6 +173,13 @@ export interface OfficeCodingResult {
   commitSha?: string;
   pushed?: boolean;
   changesDigest?: string;
+  pullRequestUrl?: string;
+  pullRequestNumber?: number;
+  pullRequestError?: string;
+  reviewFeedback?: string;
+  reviewRound: number;
+  issueUrl?: string;
+  issueError?: string;
 }
 
 export interface OfficeJobActions {
@@ -173,6 +188,8 @@ export interface OfficeJobActions {
   retry: boolean;
   publishCommit: boolean;
   publishAndPush: boolean;
+  requestChanges: boolean;
+  mergePr: boolean;
 }
 
 export interface OfficeJobError {

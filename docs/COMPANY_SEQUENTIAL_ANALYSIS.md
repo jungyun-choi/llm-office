@@ -184,14 +184,18 @@ AI_OFFICE_INTERNAL_EXECUTION_ACK=on-prem-only
 
 하나라도 빠지면 company capability와 source 로딩은 닫히는 것이 정상이다.
 
-## IssuePublisher: 연결점만, 실제 등록은 잠금
+## IssuePublisher: 최종 사람 승인 뒤 등록
 
 선택적인 Git 이슈 adapter 계약은 다음과 같다.
 
 ```js
 export const contractVersion = "ai-office-company-issue-v1";
 export async function createIssuePublisher() {
-  return { async publish(result, { artifactDigest, idempotencyKey }) { /* ... */ } };
+  return {
+    async publish(result, { artifactDigest, idempotencyKey, commitSha, branchName, pushed }) {
+      /* ... */
+    },
+  };
 }
 ```
 
@@ -200,10 +204,11 @@ AI_OFFICE_ISSUE_PUBLISHER_MODULE=/srv/company-workspace/nike_nvme/deps/ai-office
 AI_OFFICE_ISSUE_PUBLISHER_MODULE_SHA256=<sha256-64-hex>
 ```
 
-현재 공개 구현은 신뢰 경로/digest와 adapter 계약을 검증할 연결점만 제공한다. 실제 `publish()`
-호출은 하지 않고 `issueDraft`만 보존한다. 분석 artifact digest에 묶인 사람 승인, 동일
-idempotency key 조회, timeout 뒤 provider reconciliation과 exact-once 검증이 구현되기 전까지
-자동 이슈 생성은 반드시 잠가 둔다.
+adapter는 신뢰 경로와 SHA-256 digest 검증을 통과해야 한다. 실제 `publish()` 호출은 코딩·테스트와
+사람의 Git 승인까지 끝난 `completed` 시점에만 수행한다. `commit_and_push` 작업은 PR 최종 검토와
+사람의 머지 승인이 끝나기 전까지 `review_pending`에 머물기 때문에 이슈가 먼저 등록되지 않는다.
+성공한 `issueUrl`은 SQLite에 저장해 같은 Job 완료 처리가 중복 이슈를 만들지 않게 한다. publisher
+실패는 코드 반영 결과를 되돌리지 않고 `issueError`로 화면에 표시한다.
 
 ## Claude에게 전달할 포팅 체크리스트
 

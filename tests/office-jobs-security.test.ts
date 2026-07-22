@@ -11,6 +11,7 @@ import type { JobExecutionPort } from "../lib/office-jobs/application/job-execut
 import type { JobRecord } from "../lib/office-jobs/domain/job-types";
 import { LocalJobController } from "../lib/office-jobs/http/local-job-controller";
 import { getJobRuntimeConfig, type JobRuntimeConfig } from "../lib/office-jobs/infrastructure/job-config";
+import { GitHubPullRequestClient } from "../lib/office-jobs/infrastructure/github-pull-request-client";
 import {
   buildChangeManifest,
   buildClaudePrompt,
@@ -118,6 +119,108 @@ test("action state and idempotency record commit atomically", () => {
   assert.equal(unchanged?.version, 2);
   assert.equal(unchanged?.state, "coding_queued");
   repository.close();
+});
+
+test("final review can send feedback back to Claude on the same PR branch", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const config = syntheticConfig();
+  const service = new JobService(repository, inertExecutor(), config);
+  const analysis = await runHostedPoc({
+    prompt: "합성 PR 재검토 루프를 검증해 주세요",
+    executionMode: "demo",
+  });
+  const job = baseJob("합성 PR 재검토 루프를 검증해 주세요");
+  job.analysis = analysis;
+  job.codingPacket = await service.buildCodingPacket(job, analysis);
+  job.state = "review_pending";
+  job.commitSha = "b".repeat(40);
+  job.branchName = `ai-office/${job.id}`;
+  job.pullRequestUrl = "https://github.example.test/test/simulator/pull/7";
+  job.pullRequestNumber = 7;
+  job.changesDigest = "d".repeat(64);
+  job.testStatus = "passed";
+  repository.create(job);
+
+  const result = await service.act(job.id, {
+    action: "request_changes",
+    expectedVersion: job.version,
+    feedback: "경계값 테스트를 추가하고 리뷰 코멘트를 반영해 주세요.",
+  }, "review-feedback-action");
+
+  assert.equal(result.job.state, "coding_queued");
+  const stored = repository.get(job.id);
+  assert.equal(stored?.baseSha, "b".repeat(40));
+  assert.equal(stored?.codingPacket?.sourceCommit, "b".repeat(40));
+  assert.equal(stored?.reviewRound, 1);
+  assert.match(stored?.reviewFeedback ?? "", /경계값 테스트/u);
+  assert.equal(stored?.pullRequestNumber, 7);
+  assert.equal(stored?.commitSha, undefined);
+  repository.close();
+});
+
+test("final merge approval completes only after the pull request gateway succeeds", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const executor = inertExecutor();
+  let merged = 0;
+  executor.mergePullRequest = async (job) => {
+    assert.equal(job.pullRequestNumber, 11);
+    merged += 1;
+  };
+  const service = new JobService(repository, executor, syntheticConfig());
+  const job = baseJob("최종 PR 머지를 검증해 주세요");
+  job.state = "review_pending";
+  job.pullRequestUrl = "https://github.example.test/test/simulator/pull/11";
+  job.pullRequestNumber = 11;
+  job.changesDigest = "e".repeat(64);
+  repository.create(job);
+
+  const result = await service.act(job.id, {
+    action: "merge_pr",
+    expectedVersion: job.version,
+    artifactDigest: "e".repeat(64),
+  }, "final-merge-action");
+
+  assert.equal(merged, 1);
+  assert.equal(result.job.state, "completed");
+  assert.equal(result.job.actions.mergePr, false);
+  repository.close();
+});
+
+test("GitHub PR gateway creates and merges only the configured repository PR", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  const config = {
+    ...syntheticConfig(),
+    githubToken: "test-token",
+    githubApiBase: "https://github.example.test/api/v3/repos/test/simulator",
+    githubBaseBranch: "develop",
+  };
+  const job = baseJob("PR API 요청을 검증해 주세요");
+  job.branchName = `ai-office/${job.id}`;
+  job.pullRequestUrl = undefined;
+  job.pullRequestNumber = undefined;
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), method: init?.method, body: String(init?.body ?? "") });
+    if (String(input).endsWith("/pulls")) {
+      return Response.json({
+        html_url: "https://github.example.test/test/simulator/pull/21",
+        number: 21,
+      }, { status: 201 });
+    }
+    return Response.json({ merged: true }, { status: 200 });
+  };
+  try {
+    const client = new GitHubPullRequestClient(config);
+    const created = await client.create(job);
+    assert.equal(created.pullRequestNumber, 21);
+    assert.equal(requests[0]?.url, `${config.githubApiBase}/pulls`);
+    assert.match(requests[0]?.body ?? "", /"base":"develop"/u);
+    await client.merge({ ...job, ...created });
+    assert.equal(requests[1]?.url, `${config.githubApiBase}/pulls/21/merge`);
+    assert.equal(requests[1]?.method, "PUT");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("compact job list omits heavy artifacts and batches FIFO positions", async () => {
@@ -327,6 +430,8 @@ function syntheticConfig(): JobRuntimeConfig {
     testOutputLimitBytes: 8_192,
     maxActiveJobs: 10,
     pushEnabled: false,
+    githubApiBase: "https://github.example.test/api/v3/repos/test/simulator",
+    githubBaseBranch: "develop",
     internalExecutionAcknowledged: false,
   };
 }
@@ -351,6 +456,7 @@ function baseJob(prompt: string): JobRecord {
     diffTruncated: false,
     testStatus: "not_run",
     testOutputTruncated: false,
+    reviewRound: 0,
     cancelRequested: false,
     attempts: 0,
   };
@@ -398,6 +504,7 @@ function inertExecutor(): JobExecutionPort {
     runCoding: unavailable,
     runTests: unavailable,
     publish: unavailable,
+    mergePullRequest: unavailable,
     cleanup: async () => undefined,
   };
 }

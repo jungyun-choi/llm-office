@@ -168,6 +168,11 @@ AI_OFFICE_COMPANY_ALLOWED_USER=<authenticated-single-user-id>
 AI_OFFICE_CODING_ENABLED=0
 AI_OFFICE_DATA_DIR=/var/lib/ai-office
 AI_OFFICE_GIT_PUSH_ENABLED=0
+AI_OFFICE_GITHUB_TOKEN=<repo-scoped-service-token>
+AI_OFFICE_GITHUB_API_BASE=https://github.samsungds.net/api/v3/repos/LOUVRE/nike_nvme
+AI_OFFICE_GITHUB_BASE_BRANCH=develop
+AI_OFFICE_ISSUE_PUBLISHER_MODULE=/srv/company-workspace/simulator/deps/ai-office-issue.mjs
+AI_OFFICE_ISSUE_PUBLISHER_MODULE_SHA256=<sha256-64-hex>
 ```
 
 실제 회사 source extension을 연결하기 전까지 OpenCode는 `zen` 합성 profile을 유지한다.
@@ -198,7 +203,8 @@ ai-office 저장소와 회사 simulator 저장소를 함께 분석해 줘.
 6. Claude coding은 승인된 worktree와 경로에서만 실행한다.
 7. 테스트는 server-owned command id allowlist로 실행한다.
 8. Commit/Push는 기존 사람 승인 gate를 우회하지 않는다.
-9. Git 이슈는 초안만 만들고 digest 기반 별도 승인/reconciliation 전에는 publish를 호출하지 않는다.
+9. Push 뒤 PR 링크를 제공하고 review_pending에서 사람의 재개발 또는 머지 결정을 기다린다.
+10. Git 이슈는 사람의 commit 승인 또는 PR 최종 머지로 completed에 도달한 뒤 등록한다.
 
 먼저 read-only로 두 저장소의 실제 구조, 회사 OpenCode CLI 사용법, 모델 ID, 테스트 명령,
 Git 원격/branch 정책을 보고해. 확인되지 않은 값은 TODO로 남기고 작은 단계로 구현해.
@@ -214,6 +220,9 @@ Git 원격/branch 정책을 보고해. 확인되지 않은 값은 TODO로 남기
 - 분석 패킷 승인 전 Claude 프로세스가 시작되지 않는다.
 - Claude 변경은 업무 worktree와 승인된 경로 밖으로 나가지 않는다.
 - 서버 테스트 통과와 변경 digest 승인 전 Commit/Push가 실행되지 않는다.
+- Push 작업은 PR 생성 뒤 `review_pending`에서 멈추고 GitHub 링크가 웹에 보인다.
+- 사람의 리뷰 피드백이 같은 PR 브랜치의 Claude 후속 작업에 전달된다.
+- 최종 머지 승인 전에는 PR merge와 Push 작업의 Git 이슈 등록이 실행되지 않는다.
 - 실패 단계·안전한 오류·재시도 여부가 좌석과 히스토리에 보인다.
 - 앱 로그와 API에 token, credential, 절대 worktree 경로, stack trace가 노출되지 않는다.
 - SSO/MFA, project 권한, 보존·백업·감사 정책이 운영 전에 적용된다.

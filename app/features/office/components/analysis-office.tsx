@@ -116,7 +116,7 @@ function getRunningActivity(agentId: AgentId): string {
 function hasAnalysisFinished(job: OfficeJob): boolean {
   return Boolean(job.analysis) || [
     "awaiting_coding_approval", "coding_queued", "coding", "testing",
-    "changes_ready", "publishing", "completed",
+    "changes_ready", "publishing", "review_pending", "merging", "completed",
   ].includes(job.state);
 }
 

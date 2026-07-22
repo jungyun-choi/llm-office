@@ -28,7 +28,7 @@ interface OfficeFloorProps {
   isSubmitting: boolean;
   busyJobId: string | null;
   onRequest: (input: OfficeRequestInput) => Promise<boolean>;
-  onAction: (job: OfficeJob, action: OfficeJobAction, mode?: PublishMode) => Promise<void>;
+  onAction: (job: OfficeJob, action: OfficeJobAction, mode?: PublishMode, feedback?: string) => Promise<void>;
   onJobSelect: (jobId: string) => void;
   onResultOpen: (result: OfficeResult | OfficeResultPreview) => void;
   onRetryConnection: () => void;
@@ -67,7 +67,7 @@ export function OfficeFloor(props: OfficeFloorProps) {
           job={props.focusJob}
           capabilities={runtime}
           busy={props.busyJobId === props.focusJob?.id}
-          onAction={(job, action, mode) => void props.onAction(job, action, mode)}
+          onAction={(job, action, mode, feedback) => void props.onAction(job, action, mode, feedback)}
           onAnalysisOpen={props.onResultOpen}
         />
         <ClaudeOffice job={props.focusJob} runtimeLabel={runtime.codingRuntimeLabel} />
@@ -93,6 +93,8 @@ function getAccessibleJobStatus(job: OfficeJob | null): string {
   if (!job) return "새 업무를 기다리고 있습니다.";
   if (job.state === "awaiting_coding_approval") return "분석이 끝났습니다. Claude 구현 승인이 필요합니다.";
   if (job.state === "changes_ready") return "코딩과 테스트가 끝났습니다. Git 반영 승인이 필요합니다.";
+  if (job.state === "review_pending") return "PR이 준비되었습니다. 최종 코드 검토와 머지 결정이 필요합니다.";
+  if (job.state === "merging") return "최종 승인된 PR을 머지하고 있습니다.";
   if (job.state === "failed") return `업무가 멈췄습니다. ${job.error?.message ?? "오류 내용을 확인해 주세요."}`;
   return job.events.at(-1)?.message ?? `${job.prompt}, ${job.state} 상태입니다.`;
 }

@@ -292,6 +292,9 @@ describe("job analysis progress persistence", () => {
       publish: async () => {
         throw new Error("publish must not run in this test");
       },
+      mergePullRequest: async () => {
+        throw new Error("merge must not run in this test");
+      },
       cleanup: async () => undefined,
     };
     const service = new JobService(repository, executor, getJobRuntimeConfig());

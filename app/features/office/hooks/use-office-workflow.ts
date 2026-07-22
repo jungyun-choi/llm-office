@@ -38,7 +38,7 @@ export interface OfficeWorkflowState {
   isSubmitting: boolean;
   busyJobId: string | null;
   startWorkflow: (input: OfficeRequestInput) => Promise<boolean>;
-  runAction: (job: OfficeJob, action: OfficeJobAction, mode?: PublishMode) => Promise<void>;
+  runAction: (job: OfficeJob, action: OfficeJobAction, mode?: PublishMode, feedback?: string) => Promise<void>;
   selectJob: (jobId: string) => void;
   openResult: (result: OfficeResult | OfficeResultPreview) => void;
   closeResult: () => void;
@@ -152,13 +152,14 @@ export function useOfficeWorkflow(): OfficeWorkflowState {
     job: OfficeJob,
     action: OfficeJobAction,
     mode?: PublishMode,
+    feedback?: string,
   ): Promise<void> => {
     if (busyJobId) return;
     setBusyJobId(job.id);
     setActionError(null);
     const controller = new AbortController();
     try {
-      const updated = await runOfficeJobAction(job, action, mode, controller.signal);
+      const updated = await runOfficeJobAction(job, action, mode, feedback, controller.signal);
       setJobs((current) => upsertJob(current, updated));
       setSelectedJobId(updated.id);
     } catch (error) {
@@ -318,13 +319,13 @@ export function getJobPollingDelay(hasActiveJobs: boolean, consecutiveFailures: 
 }
 
 function isPollingState(state: OfficeJob["state"]): boolean {
-  return !["completed", "failed", "canceled", "awaiting_coding_approval", "changes_ready"].includes(state);
+  return !["completed", "failed", "canceled", "awaiting_coding_approval", "changes_ready", "review_pending"].includes(state);
 }
 
 function chooseFocusJob(jobs: readonly OfficeJob[]): OfficeJob | null {
   const priorities: readonly OfficeJob["state"][] = [
-    "awaiting_coding_approval", "changes_ready", "failed", "coding", "testing",
-    "publishing", "analyzing", "coding_queued", "queued", "completed", "canceled",
+    "review_pending", "awaiting_coding_approval", "changes_ready", "failed", "coding", "testing",
+    "merging", "publishing", "analyzing", "coding_queued", "queued", "completed", "canceled",
   ];
   for (const state of priorities) {
     const job = jobs.find((candidate) => candidate.state === state);

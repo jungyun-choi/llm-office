@@ -21,6 +21,14 @@ export const jobActionSchema = z.discriminatedUnion("action", [
     artifactDigest: z.string().regex(digestPattern),
     mode: z.enum(["commit", "commit_and_push"]),
   }).strict(),
+  actionBase.extend({
+    action: z.literal("request_changes"),
+    feedback: z.string().trim().min(1).max(4_000),
+  }).strict(),
+  actionBase.extend({
+    action: z.literal("merge_pr"),
+    artifactDigest: z.string().regex(digestPattern),
+  }).strict(),
   actionBase.extend({ action: z.literal("cancel") }).strict(),
   actionBase.extend({ action: z.literal("retry") }).strict(),
 ]);
