@@ -4,7 +4,7 @@
 계약이다. 회사 자료를 처리하는 정식 진입점은 영속 Job API 하나뿐이다.
 
 ```text
-POST /api/v1/jobs → 202 Accepted → SQLite FIFO → background worker
+POST /api/v1/jobs → 202 Accepted → SQLite analysis FIFO → analysis worker lane
   → research → framework → estimate → test → git → orchestrator
   → awaiting_coding_approval
 ```
@@ -15,8 +15,9 @@ extension을 열어 주지 않으며 실제 회사 요청, 코드, 문서 또는
 ## 실행과 UI 계약
 
 `POST /api/v1/jobs`는 모델 완료를 기다리지 않고 즉시 `202`와 Job DTO를 반환한다. 서버의
-단일 background worker가 SQLite 대기열을 FIFO로 처리하므로 브라우저 연결이 끊겨도 분석은
-계속된다. 같은 idempotency key 재전송은 새 업무를 만들지 않는다.
+분석 worker lane이 SQLite 분석 대기열을 FIFO로 처리하므로 브라우저 연결이 끊겨도 분석은
+계속된다. 개발 worker lane은 승인된 다른 업무를 동시에 처리할 수 있다. 같은 idempotency
+key 재전송은 새 업무를 만들지 않는다.
 
 각 업무는 아래 여섯 모델 턴을 정확히 한 번씩 순차 실행한다.
 

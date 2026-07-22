@@ -22,7 +22,14 @@ const BASE_JOB = {
       attempt: 1,
     },
   ],
-  codingPacket: { digest: "packet-digest" },
+  codingPacket: {
+    digest: "packet-digest",
+    allowedPaths: ["poc/simulator/src", "/Users/person/work/private"],
+    brief: {
+      objective: "Read buffer 경계를 안전하게 확장",
+      scope: ["buffer manager 수정", "/Users/person/work 내부 경로 제거"],
+    },
+  },
   coding: {
     profile: "synthetic",
     enabled: true,
@@ -61,6 +68,9 @@ test("bare and wrapped JobDTO responses are normalized", () => {
   assert.equal(bare.coding?.test?.status, "passed");
   assert.equal(bare.coding?.pullRequestNumber, 4);
   assert.equal(bare.coding?.reviewRound, 2);
+  assert.equal(bare.codingPlan?.objective, "Read buffer 경계를 안전하게 확장");
+  assert.deepEqual(bare.codingPlan?.allowedPaths, ["poc/simulator/src", "[workspace-path]"]);
+  assert.match(bare.codingPlan?.scope[1] ?? "", /\[workspace-path\]/u);
   assert.deepEqual(bare.analysisStages.map(({ id, status }) => ({ id, status })), [
     { id: "research", status: "completed" },
     { id: "framework", status: "running" },

@@ -17,9 +17,9 @@ export function AnalysisOffice({ job, runtimeLabel }: AnalysisOfficeProps) {
       <header className="campus-office__header">
         <span className="campus-office__icon"><BrainCircuit size={18} aria-hidden="true" /></span>
         <div>
-          <small>OFFICE A · ANALYSIS</small>
-          <h2 id="analysis-office-title">OpenCode 분석 사무실</h2>
-          <p>{runtimeLabel ?? "사내 OpenCode 분석 팀"}</p>
+          <small>TEAM A · ANALYSIS</small>
+          <h2 id="analysis-office-title">OpenCode 분석팀</h2>
+          <p>{runtimeLabel ?? "사내 OpenCode 분석 실행기"}</p>
         </div>
         <OfficeStateBadge state={getAnalysisOfficeState(job)} />
       </header>

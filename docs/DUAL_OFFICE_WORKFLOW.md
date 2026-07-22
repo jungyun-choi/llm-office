@@ -1,6 +1,7 @@
-# Dual Office 실행 흐름
+# 세 팀 운영 흐름
 
-AI Office는 한 대의 서버에서 두 개의 권한 영역을 순차 실행한다.
+AI Office는 한 대의 서버에서 분석팀, 사용자 검토팀, 개발팀을 운영한다. 분석과 개발은
+서로 다른 lane이므로 각 lane의 FIFO를 지키면서 서로 다른 업무를 동시에 처리할 수 있다.
 
 ```text
 요청
@@ -29,9 +30,10 @@ Vinext 웹 프로세스
   │ bridge token은 서버 내부에서만 전달
   ▼
 127.0.0.1:4317 Node bridge
-  ├─ SQLite FIFO와 상태 히스토리
-  ├─ OpenCode 분석 runtime
-  ├─ Claude Code coding runtime
+  ├─ SQLite 팀별 FIFO와 상태 히스토리
+  ├─ OpenCode 분석 lane, 동시 1건
+  ├─ Claude Code 개발 lane, 동시 1건
+  ├─ 사용자 승인 inbox
   ├─ Git worktree adapter
   └─ allowlist 테스트 및 Git publisher
 ```
@@ -52,7 +54,7 @@ queued → analyzing → awaiting_coding_approval
 ```
 
 실패와 취소는 각각 `failed`, `canceled`다. 서버 재시작 시 실행 중이던 업무는 안전한
-복구 상태로 전환하고, 대기 업무는 SQLite에서 다시 읽어 FIFO 순서를 이어간다.
+복구 상태로 전환하고, 대기 업무는 SQLite에서 다시 읽어 각 팀의 FIFO 순서를 이어간다.
 
 - 코딩 승인에는 job의 최신 `version`과 분석 패킷 `digest`가 필요하다.
 - Git 승인에는 최신 `version`과 변경 묶음 `digest`가 필요하다.

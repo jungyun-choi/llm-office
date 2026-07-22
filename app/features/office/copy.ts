@@ -2,10 +2,10 @@ export const OFFICE_COPY = {
   metadata: {
     title: "AI Office | 팀이 움직이는 디지털 사무실",
     description:
-      "한 문장으로 업무를 맡기면 여섯 AI 에이전트가 협업해 결과를 정리하는 디지털 사무실",
+      "분석팀, 사용자 검토팀, Claude 개발팀이 독립 대기열로 함께 움직이는 디지털 사무실",
     openGraphDescription:
-      "오케스트레이터에게 업무를 맡기고 조사, 설계, 견적, 테스트, Git 정리까지 흐름으로 확인하세요.",
-    twitterDescription: "여섯 AI 에이전트가 함께 일하는 디지털 사무실",
+      "오케스트레이터에게 업무를 맡기고 분석, 사람 승인, Claude 구현과 PR 검토를 팀별로 확인하세요.",
+    twitterDescription: "세 팀이 동시에 움직이는 AI 개발 사무실",
   },
   header: {
     brand: "AI OFFICE",
@@ -48,7 +48,7 @@ export const OFFICE_COPY = {
       checking: "현재 POC: 실행 엔진 확인 중 · 역할 흐름은 시각화",
       codex: "현재 POC: Codex 단일 호출 1회 · 역할 흐름은 시각화",
       opencode: "현재 POC: Zen 단일 호출 1회 · 역할 흐름은 시각화",
-      server: "단일 서버 대기열 · OpenCode 분석 후 승인된 Claude 코딩",
+      server: "단일 서버 · 분석팀과 개발팀의 독립 대기열",
       demo: "현재 시연: 결정론적 결과 · 역할 흐름은 시각화",
       disconnected: "단일 서버 연결이 필요합니다 · 서버 실행 상태를 확인하세요",
     },
@@ -56,8 +56,8 @@ export const OFFICE_COPY = {
     maxError: "업무 설명은 2,000자 이내로 작성해 주세요.",
   },
   floor: {
-    eyebrow: "AI OFFICE · LIVE WORKFLOW",
-    title: "요청 하나로, 분석부터 PR 검토까지",
+    eyebrow: "AI OFFICE · LIVE COMPANY",
+    title: "업무를 맡기면, 세 팀이 나눠 처리합니다",
     idleTask: "새 업무를 기다리고 있어요",
     taskLabel: "현재 업무",
     collaborationTable: "중앙 협업 테이블",

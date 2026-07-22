@@ -186,8 +186,9 @@ orchestrator` 여섯 턴을 순차 실행하고 호출당 최대 1시간, 자동
 codemate 인증에 필요한 기본 plugin을 끄면 안 된다. 특히 `OPENCODE_DISABLE_DEFAULT_PLUGINS`를
 설정하지 않는다.
 
-분석 요청은 `POST /api/v1/jobs`에서 즉시 `202`를 받은 뒤 SQLite FIFO background worker가
-처리한다. 화면에는 현재 역할, 내부 phase, `n/6`, 경과 시간과 오류가 polling으로 표시된다.
+분석 요청은 `POST /api/v1/jobs`에서 즉시 `202`를 받은 뒤 SQLite analysis FIFO worker lane이
+처리한다. Claude 개발은 별도 development FIFO worker lane에서 실행되므로 다른 업무의 분석과
+동시에 진행될 수 있다. 화면에는 현재 역할, 내부 phase, `n/6`, 경과 시간과 오류가 polling으로 표시된다.
 
 한 서버에서 직접 확인하려면 company 환경을 export한 뒤 한 명령으로 loopback bridge와 웹을
 함께 띄울 수 있다. `dev:office`는 `AI_OFFICE_OPENCODE_PROFILE=company`를 감지해

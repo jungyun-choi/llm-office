@@ -182,6 +182,12 @@ export interface OfficeCodingResult {
   issueError?: string;
 }
 
+export interface OfficeCodingPlan {
+  objective?: string;
+  scope: readonly string[];
+  allowedPaths: readonly string[];
+}
+
 export interface OfficeJobActions {
   approveCoding: boolean;
   cancel: boolean;
@@ -246,6 +252,7 @@ export interface OfficeJob {
   analysisPreview?: OfficeAnalysisPreview;
   analysisStages: readonly OfficeAnalysisStage[];
   coding?: OfficeCodingResult;
+  codingPlan?: OfficeCodingPlan;
   error?: OfficeJobError;
   events: readonly OfficeJobEvent[];
   actions: OfficeJobActions;

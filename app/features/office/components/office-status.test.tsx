@@ -12,8 +12,9 @@ import { getPocTruthLabel } from "./task-composer";
 import { TaskQueueHistory } from "./task-queue-history";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
-import { getDevelopmentStationState } from "./claude-office";
+import { ClaudeOffice, getDevelopmentStationState } from "./claude-office";
 import { AnalysisOffice, getAnalysisAgentState } from "./analysis-office";
+import { CompanyOperationsBoard, getCompanyTeam } from "./company-operations-board";
 import { getAnalysisPhaseLabel } from "./analysis-stage-progress";
 import {
   calculateWorkflowElapsedSeconds,
@@ -189,6 +190,47 @@ test("Claude stations map coding, testing, and Git approval states", () => {
   assert.equal(getDevelopmentStationState("implementation", testing), "complete");
   assert.equal(getDevelopmentStationState("verification", testing), "working");
   assert.equal(getDevelopmentStationState("publisher", changesReady), "waiting");
+});
+
+test("company board assigns simultaneous work to independent teams", () => {
+  const analysis = createJob("job-analysis", "DLD와 TopView를 분석해줘", "analyzing");
+  const review = createJob("job-review", "구현 패킷을 검토해줘", "awaiting_coding_approval");
+  const coding = createJob("job-coding", "Read buffer 코드를 수정해줘", "coding");
+  const markup = renderToStaticMarkup(
+    <CompanyOperationsBoard
+      jobs={[analysis, review, coding]}
+      selectedJobId={coding.id}
+      onSelect={() => undefined}
+    />,
+  );
+
+  assert.equal(getCompanyTeam(analysis), "analysis");
+  assert.equal(getCompanyTeam(review), "review");
+  assert.equal(getCompanyTeam(coding), "development");
+  assert.match(markup, /세 팀이 각자의 업무를 동시에 처리합니다/u);
+  assert.match(markup, /DLD와 TopView를 분석해줘/u);
+  assert.match(markup, /구현 패킷을 검토해줘/u);
+  assert.match(markup, /Read buffer 코드를 수정해줘/u);
+  assert.match(markup, /data-selected="true"/u);
+});
+
+test("Claude team shows a safe implementation plan and verified file targets", () => {
+  const job: OfficeJob = {
+    ...createJob("job-live-coding", "Read buffer를 확장해줘", "coding"),
+    codingPlan: {
+      objective: "읽기 버퍼 상한과 경계 검증을 함께 확장",
+      scope: ["버퍼 설정 변경", "회귀 테스트 추가"],
+      allowedPaths: ["poc/simulator/src", "poc/simulator/tests"],
+    },
+    events: [{ id: "event-1", message: "Claude 개발팀이 코딩을 시작했습니다." }],
+  };
+  const markup = renderToStaticMarkup(<ClaudeOffice job={job} runtimeLabel="CodeLLMPro" />);
+
+  assert.match(markup, /Claude 작업 현황/u);
+  assert.match(markup, /허용된 경로에서 코드 구현/u);
+  assert.match(markup, /읽기 버퍼 상한과 경계 검증을 함께 확장/u);
+  assert.match(markup, /poc\/simulator\/src/u);
+  assert.match(markup, /실제 변경 파일은 Claude 실행이 끝나는 즉시 표시됩니다/u);
 });
 
 test("company analysis progress activates only the current specialist", () => {

@@ -31,9 +31,9 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
   return (
     <section className="review-dispatch" aria-labelledby="review-dispatch-title" data-state={props.job?.state ?? "empty"}>
       <header>
-        <small>HUMAN GATE 1 · IMPLEMENTATION</small>
-        <h2 id="review-dispatch-title">검토 · 전달 데스크</h2>
-        <p>코드 수정과 Git 반영은 당신이 승인해야 시작됩니다.</p>
+        <small>TEAM B · HUMAN REVIEW</small>
+        <h2 id="review-dispatch-title">사용자 검토팀</h2>
+        <p>구현 승인부터 Git 반영, PR 최종 결정까지 당신이 담당합니다.</p>
       </header>
       <div className="review-packet" aria-hidden="true">
         <span className="review-packet__source">OpenCode</span>

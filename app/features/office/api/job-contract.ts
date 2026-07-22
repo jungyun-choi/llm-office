@@ -5,6 +5,7 @@ import type {
   OfficeAnalysisPreview,
   OfficeAnalysisStage,
   OfficeChangedFile,
+  OfficeCodingPlan,
   OfficeCodingResult,
   OfficeCodingTest,
   OfficeJob,
@@ -101,6 +102,7 @@ function normalizeJob(
     coding: coding && !coding.baseSha
       ? { ...coding, baseSha: codingPacket && readString(codingPacket, ["sourceCommit", "source_commit"]) }
       : coding,
+    codingPlan: normalizeCodingPlan(codingPacket),
     error: normalizeError(record.error),
     events: normalizeEvents(record.events),
     actions: normalizeActions(record.actions),
@@ -108,6 +110,29 @@ function normalizeJob(
     codingPacketDigest: readString(record, ["codingPacketDigest", "coding_packet_digest"])
       ?? readDigest(codingPacket),
   };
+}
+
+function normalizeCodingPlan(value: Record<string, unknown> | undefined): OfficeCodingPlan | undefined {
+  if (!value) return undefined;
+  const brief = asRecord(value.brief);
+  const objective = brief && readString(brief, ["objective"]);
+  const scope = brief ? normalizeBoundedStrings(brief.scope, 16, 600) : [];
+  const allowedPaths = normalizeBoundedStrings(value.allowedPaths ?? value.allowed_paths, 32, 240)
+    .map(safeRepoPath);
+  if (!objective && scope.length === 0 && allowedPaths.length === 0) return undefined;
+  return {
+    objective: objective ? redactAbsolutePaths(objective).slice(0, 1_000) : undefined,
+    scope,
+    allowedPaths,
+  };
+}
+
+function normalizeBoundedStrings(value: unknown, limit: number, maxLength: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    .slice(0, limit)
+    .map((entry) => redactAbsolutePaths(entry).slice(0, maxLength));
 }
 
 function normalizeAnalysisPreview(value: unknown): OfficeAnalysisPreview | undefined {
