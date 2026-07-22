@@ -467,7 +467,7 @@
 }
 
 .human-review-room {
-  min-height: 244px;
+  min-height: 280px;
 }
 
 .human-review-room__window {
@@ -514,13 +514,13 @@
   left: 15px;
   z-index: 5;
   width: clamp(128px, 42%, 178px);
-  min-height: 148px;
+  min-height: 184px;
 }
 
 .human-file-stack > li:not(.human-file-stack__overflow) {
-  top: auto;
+  top: calc(var(--file-index) * 44px);
   right: calc(var(--file-index) * 1px);
-  bottom: calc(var(--file-index) * 27px);
+  bottom: auto;
   left: calc(var(--file-index) * 1px);
   z-index: calc(20 - var(--file-index));
 }
@@ -528,7 +528,7 @@
 .human-file-stack > li:not(.human-file-stack__overflow) button,
 .human-bottleneck[data-level="bottleneck"] .human-file-stack > li:not(.human-file-stack__overflow) button {
   display: block;
-  min-height: 44px;
+  min-height: 52px;
   padding: 16px 9px 6px;
   overflow: hidden;
   border-color: #c79d62;
