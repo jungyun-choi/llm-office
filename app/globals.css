@@ -2222,6 +2222,92 @@ textarea:focus-visible {
 
 /* Desktop readability: the office is a workspace, not a miniature map. */
 @media (min-width: 901px) {
+  .office-room {
+    --office-rail-width: 250px;
+    --office-rail-gap: 36px;
+  }
+
+  .office-room__header {
+    width: 330px;
+  }
+
+  .agent-station {
+    width: 200px;
+  }
+
+  .agent-station--north-west {
+    top: 16%;
+    left: 7%;
+  }
+
+  .agent-station--north {
+    left: calc((100% - var(--office-rail-width) - var(--office-rail-gap)) / 2 - 100px);
+  }
+
+  .agent-station--north-east,
+  .agent-station--south-east {
+    right: calc(var(--office-rail-width) + var(--office-rail-gap));
+  }
+
+  .agent-station--north-east {
+    top: 16%;
+  }
+
+  .agent-station--south-west,
+  .agent-station--south-east {
+    top: 40%;
+  }
+
+  .agent-station--south {
+    top: 40%;
+    left: 25%;
+  }
+
+  .collaboration-table {
+    top: 29%;
+    left: 54%;
+  }
+
+  .collaboration-table__top::after {
+    left: 35px;
+  }
+
+  .office-plant {
+    display: none;
+  }
+
+  .result-vault,
+  .task-queue-history,
+  .handoff-caption {
+    right: 20px;
+    left: auto;
+    width: var(--office-rail-width);
+    transform: none;
+  }
+
+  .result-vault {
+    min-height: 190px;
+  }
+
+  .task-queue-history {
+    max-height: 238px;
+  }
+
+  .handoff-caption {
+    top: 320px;
+    bottom: auto;
+    z-index: 20;
+  }
+
+  .office-room:has(.task-queue-history ol) .handoff-caption {
+    top: 470px;
+  }
+
+  .task-composer {
+    left: calc((100% - var(--office-rail-width) - var(--office-rail-gap)) / 2);
+    width: min(760px, calc(100% - var(--office-rail-width) - 76px));
+  }
+
   .office-brand small {
     font-size: 10px;
   }
@@ -2394,7 +2480,7 @@ textarea:focus-visible {
   .result-vault { width: 190px; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1199px) {
   .office-app {
     overflow: visible;
   }
@@ -2472,6 +2558,7 @@ textarea:focus-visible {
   .agent-station {
     position: static;
     width: auto;
+    transform: none;
   }
 
   .agent-station__content {
@@ -2856,6 +2943,67 @@ textarea:focus-visible {
   }
 }
 
+@media (min-width: 901px) and (max-width: 1199px) {
+  .office-header {
+    width: calc(100% - 30px);
+    height: 64px;
+  }
+
+  .office-brand small {
+    display: block;
+  }
+
+  .office-room {
+    width: calc(100% - 24px);
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .office-room__header {
+    padding: 2px 2px 18px;
+  }
+
+  .agent-stations {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .agent-station__content {
+    padding: 12px;
+  }
+
+  .agent-desk-graphic {
+    height: 64px;
+    transform: scale(.86);
+  }
+
+  .agent-station__label {
+    margin-top: 0;
+  }
+
+  .agent-station__label small,
+  .agent-station__content > p {
+    font-size: 12px;
+  }
+
+  .task-composer,
+  .handoff-caption,
+  .agent-stations,
+  .task-queue-history,
+  .result-vault {
+    width: min(100%, 980px);
+    align-self: center;
+  }
+
+  .task-composer {
+    padding: 16px;
+  }
+
+  .task-queue-history {
+    max-height: 340px;
+  }
+}
+
 @media (max-width: 520px) {
   .connection-status {
     width: auto;
@@ -2924,7 +3072,7 @@ textarea:focus-visible {
   }
 }
 
-@media (max-height: 760px) and (min-width: 901px) {
+@media (max-height: 760px) and (min-width: 1200px) {
   .office-room {
     min-height: 650px;
   }
