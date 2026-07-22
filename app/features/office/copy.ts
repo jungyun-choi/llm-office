@@ -56,8 +56,8 @@ export const OFFICE_COPY = {
     maxError: "업무 설명은 2,000자 이내로 작성해 주세요.",
   },
   floor: {
-    eyebrow: "LIVE OFFICE FLOOR",
-    title: "팀이 움직이는 사무실",
+    eyebrow: "AI OFFICE · LIVE WORKFLOW",
+    title: "요청 하나로, 분석부터 PR 검토까지",
     idleTask: "새 업무를 기다리고 있어요",
     taskLabel: "현재 업무",
     collaborationTable: "중앙 협업 테이블",

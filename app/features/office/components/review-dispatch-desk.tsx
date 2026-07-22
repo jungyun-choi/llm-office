@@ -11,6 +11,7 @@ import {
   MessageSquareText,
   RotateCcw,
   Send,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -105,6 +106,7 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
 
 function FinalReviewGate(props: ReviewDispatchDeskProps & { job: OfficeJob }) {
   const [feedback, setFeedback] = useState("");
+  const [mergeConfirmationOpen, setMergeConfirmationOpen] = useState(false);
   const canRequestChanges = props.job.actions.requestChanges && feedback.trim().length > 0;
   const reviewRound = props.job.coding?.reviewRound ?? 0;
   return (
@@ -138,23 +140,51 @@ function FinalReviewGate(props: ReviewDispatchDeskProps & { job: OfficeJob }) {
           onChange={(event) => setFeedback(event.target.value)}
         />
       </label>
+      {mergeConfirmationOpen && (
+        <p className="final-review-gate__confirmation" role="status">
+          이 승인은 PR을 바로 머지합니다. GitHub 검토를 마쳤다면 한 번 더 확정하세요.
+        </p>
+      )}
       <div className="final-review-gate__actions">
-        <button
-          className="review-dispatch__secondary"
-          type="button"
-          disabled={props.busy || !canRequestChanges}
-          onClick={() => props.onAction(props.job, "request_changes", undefined, feedback.trim())}
-        >
-          <RotateCcw size={15} aria-hidden="true" />개발팀에 재의뢰
-        </button>
-        <button
-          className="review-dispatch__primary"
-          type="button"
-          disabled={props.busy || !props.job.actions.mergePr}
-          onClick={() => props.onAction(props.job, "merge_pr")}
-        >
-          <GitMerge size={16} aria-hidden="true" />최종 머지 승인
-        </button>
+        {mergeConfirmationOpen ? (
+          <>
+            <button
+              className="review-dispatch__secondary"
+              type="button"
+              disabled={props.busy}
+              onClick={() => setMergeConfirmationOpen(false)}
+            >
+              <RotateCcw size={15} aria-hidden="true" />검토로 돌아가기
+            </button>
+            <button
+              className="review-dispatch__primary final-review-gate__merge-confirm"
+              type="button"
+              disabled={props.busy || !props.job.actions.mergePr}
+              onClick={() => props.onAction(props.job, "merge_pr")}
+            >
+              <ShieldCheck size={16} aria-hidden="true" />PR 머지 확정
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              className="review-dispatch__secondary"
+              type="button"
+              disabled={props.busy || !canRequestChanges}
+              onClick={() => props.onAction(props.job, "request_changes", undefined, feedback.trim())}
+            >
+              <RotateCcw size={15} aria-hidden="true" />개발팀에 재의뢰
+            </button>
+            <button
+              className="review-dispatch__primary"
+              type="button"
+              disabled={props.busy || !props.job.actions.mergePr}
+              onClick={() => setMergeConfirmationOpen(true)}
+            >
+              <GitMerge size={16} aria-hidden="true" />최종 머지 승인
+            </button>
+          </>
+        )}
       </div>
       {reviewRound > 0 && (
         <small className="final-review-gate__round">재검토 {reviewRound}회차</small>

@@ -48,7 +48,10 @@ test("server-renders the AI Office floor", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="ko">/i);
   assert.match(html, /<title>AI Office \| 팀이 움직이는 디지털 사무실<\/title>/i);
-  assert.match(html, /분석에서 코딩까지, 한 사무실에서/);
+  assert.match(html, /요청 하나로, 분석부터 PR 검토까지/);
+  assert.match(html, /업무 흐름/);
+  assert.match(html, /Human Gate 1/);
+  assert.match(html, /Human Gate 2/);
   assert.match(html, /오비트에게 요청/);
   assert.match(html, /OpenCode 분석 사무실/);
   assert.match(html, /검토 · 전달 데스크/);
