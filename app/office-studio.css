@@ -74,6 +74,7 @@
 
 .task-composer__quick {
   color: #446761;
+  min-height: 44px;
 }
 
 .company-operations {
