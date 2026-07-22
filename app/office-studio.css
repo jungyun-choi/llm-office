@@ -762,6 +762,10 @@
   letter-spacing: .06em;
 }
 
+.review-dispatch > header h2 {
+  font-weight: 790;
+}
+
 .campus-office__state {
   padding: 0;
   border-radius: 0;
