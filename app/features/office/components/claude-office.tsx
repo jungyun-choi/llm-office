@@ -1,4 +1,4 @@
-import { Bot, Check, CircleDot, FileCode2, ListChecks, Radio } from "lucide-react";
+import { ArrowRight, Bot, Check, CircleDot, FileCode2, ListChecks, Radio } from "lucide-react";
 
 import type { DevelopmentFlowState, DevelopmentStationId, OfficeJob } from "../types";
 import { CodingResultPanel } from "./coding-result-panel";
@@ -8,11 +8,30 @@ const PHASES: readonly {
   id: Exclude<DevelopmentStationId, "claude">;
   label: string;
   title: string;
+  model: string;
   description: string;
 }[] = [
-  { id: "implementation", label: "01 · BUILD", title: "구현", description: "격리 브랜치에서 코드 수정" },
-  { id: "verification", label: "02 · TEST", title: "검증", description: "허용된 테스트 명령 실행" },
-  { id: "publisher", label: "03 · GIT", title: "Git", description: "승인 후 commit · push" },
+  {
+    id: "implementation",
+    label: "BUILDER",
+    title: "구현 담당",
+    model: "Claude Sonnet",
+    description: "팀장 지시에 따라 코드와 테스트를 구현",
+  },
+  {
+    id: "verification",
+    label: "VERIFIER",
+    title: "검증 담당",
+    model: "Claude Sonnet",
+    description: "Diff · 테스트 · 회귀 위험을 독립 검증",
+  },
+  {
+    id: "publisher",
+    label: "RELEASE",
+    title: "Git 담당",
+    model: "Claude Haiku",
+    description: "승인된 변경의 Commit · Push · PR 처리",
+  },
 ];
 
 interface ClaudeOfficeProps {
@@ -29,19 +48,21 @@ export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
         <div>
           <small>TEAM C · DEVELOPMENT</small>
           <h2 id="claude-office-title">개발팀</h2>
-          <p>{job?.coding?.model ?? runtimeLabel ?? "승인된 사내 Claude 실행기"}</p>
+          <p title={runtimeLabel}>Opus · Sonnet · Haiku 협업 런타임</p>
         </div>
         <span className="campus-office__state">{getClaudeOfficeState(job)}</span>
       </header>
       <div className="claude-station-grid">
         <DevelopmentStation
           id="claude"
-          label="CLAUDE LEAD"
-          title="클로드"
+          label="TEAM LEAD · OPUS"
+          title="클로드 팀장"
+          model="Claude Opus"
           description={getClaudeActivity(job)}
           state={leadState}
           lead
         />
+        <DevelopmentTeamExchange job={job} />
         <div className="claude-phase-row" aria-label="Claude 구현 단계">
           {PHASES.map((phase) => (
             <DevelopmentStation
@@ -58,7 +79,14 @@ export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
   );
 }
 
-const IMPLEMENTATION_PLAN = ["구현 범위 확인", "코드 수정", "테스트", "Git · PR"] as const;
+const IMPLEMENTATION_PLAN = [
+  "Opus 계획",
+  "Sonnet 구현",
+  "Opus 코드 리뷰",
+  "Sonnet 검증",
+  "Opus 최종 판단",
+  "Haiku Git · PR",
+] as const;
 
 type ImplementationPlanState = "pending" | "active" | "completed" | "failed";
 
@@ -73,7 +101,7 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
       <header>
         <div>
           <small><Radio size={13} aria-hidden="true" />IMPLEMENTATION LIVE</small>
-          <strong id={`claude-activity-${job.id}`}>Claude 작업 현황</strong>
+          <strong id={`claude-activity-${job.id}`}>개발팀 작업 현황</strong>
         </div>
         <span data-state={job.state}>{getClaudeOfficeState(job)}</span>
       </header>
@@ -160,16 +188,17 @@ function getImplementationPlanState(job: OfficeJob, index: number): Implementati
 export function getImplementationPlanIndex(job: OfficeJob): number {
   if (["awaiting_coding_approval", "coding_queued"].includes(job.state)) return 0;
   if (job.state === "coding") return 1;
-  if (job.state === "testing") return 2;
-  if (["changes_ready", "publishing", "review_pending", "merging"].includes(job.state)) return 3;
+  if (job.state === "testing") return 3;
+  if (job.state === "changes_ready") return 4;
+  if (["publishing", "review_pending", "merging"].includes(job.state)) return 5;
   if (job.state === "failed") {
     if (job.error?.stage === "analysis" || job.error?.stage === "queue") return 0;
     if (job.error?.stage === "coding") return 1;
-    if (job.error?.stage === "testing") return 2;
-    if (job.error?.stage === "publishing") return 3;
+    if (job.error?.stage === "testing") return 3;
+    if (job.error?.stage === "publishing") return 5;
     return job.coding ? 1 : 0;
   }
-  return 3;
+  return 5;
 }
 
 export function getDevelopmentStationState(
@@ -257,4 +286,124 @@ function hasCodingArtifacts(job: OfficeJob): boolean {
       || job.coding?.commitSha
       || (job.coding?.test && job.coding.test.status !== "not_run"),
   );
+}
+
+interface DevelopmentExchange {
+  from: string;
+  to: string;
+  message: string;
+  tone: "idle" | "active" | "blocked" | "complete";
+}
+
+function DevelopmentTeamExchange({ job }: { job: OfficeJob | null }) {
+  const exchange = getDevelopmentExchange(job);
+  return (
+    <div className="development-team-exchange" data-tone={exchange.tone} aria-live="polite">
+      <span className="development-team-exchange__signal" aria-hidden="true"><Radio size={14} /></span>
+      <div>
+        <small>TEAM HANDOFF</small>
+        <strong>
+          <span>{exchange.from}</span>
+          <ArrowRight size={14} aria-hidden="true" />
+          <span>{exchange.to}</span>
+        </strong>
+        <p>{exchange.message}</p>
+      </div>
+      <i aria-hidden="true" />
+    </div>
+  );
+}
+
+export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchange {
+  if (!job || ["queued", "analyzing", "canceled"].includes(job.state) || isPreDevelopmentFailure(job)) {
+    return {
+      from: "검토팀",
+      to: "Opus 팀장",
+      message: "승인된 구현 패킷을 기다리고 있습니다.",
+      tone: "idle",
+    };
+  }
+  if (job.state === "awaiting_coding_approval") {
+    return {
+      from: "검토팀",
+      to: "Opus 팀장",
+      message: "구현 승인 전에는 개발팀이 코드를 수정하지 않습니다.",
+      tone: "idle",
+    };
+  }
+  if (job.state === "coding_queued") {
+    return {
+      from: "Opus 팀장",
+      to: "Sonnet 구현",
+      message: "분석 패킷을 검토하고 구현 순서와 작업 지시를 준비합니다.",
+      tone: "active",
+    };
+  }
+  if (job.state === "coding") {
+    return {
+      from: "Opus 팀장",
+      to: "Sonnet 구현",
+      message: "구현 지시 전달 · 막히는 내용은 근거와 함께 팀장에게 보고합니다.",
+      tone: "active",
+    };
+  }
+  if (job.state === "testing") {
+    return {
+      from: "Sonnet 구현",
+      to: "Sonnet 검증",
+      message: "변경 파일과 구현 결과를 인계해 독립 검증을 진행합니다.",
+      tone: "active",
+    };
+  }
+  if (job.state === "changes_ready") {
+    return {
+      from: "Sonnet 검증",
+      to: "Opus 팀장",
+      message: "검증 결과를 보고하고 사용자의 Git 승인을 기다립니다.",
+      tone: "complete",
+    };
+  }
+  if (job.state === "publishing") {
+    return {
+      from: "Opus 팀장",
+      to: "Haiku Git",
+      message: "사용자가 승인한 변경의 Commit · Push · PR 작업을 지시합니다.",
+      tone: "active",
+    };
+  }
+  if (["review_pending", "merging"].includes(job.state)) {
+    return {
+      from: "Haiku Git",
+      to: "검토팀",
+      message: "PR과 Git 결과를 전달해 사용자의 최종 코드 검토를 기다립니다.",
+      tone: "complete",
+    };
+  }
+  if (job.state === "completed") {
+    return {
+      from: "개발팀",
+      to: "검토팀",
+      message: "구현·검증·Git 작업과 사람 검토가 모두 완료됐습니다.",
+      tone: "complete",
+    };
+  }
+  if (job.state === "failed") {
+    const from = job.error?.stage === "testing"
+      ? "Sonnet 검증"
+      : job.error?.stage === "publishing"
+      ? "Haiku Git"
+      : "Sonnet 구현";
+    return {
+      from,
+      to: "Opus 팀장",
+      message: job.error?.message ?? "작업을 계속하기 위한 팀장 지시가 필요합니다.",
+      tone: "blocked",
+    };
+  }
+  return {
+    from: "Opus 팀장",
+    to: "개발팀",
+    message: "현재 업무 상태를 확인하고 있습니다.",
+    tone: "idle",
+  };
 }

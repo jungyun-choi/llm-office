@@ -13,6 +13,7 @@ interface DevelopmentStationProps {
   id: DevelopmentStationId;
   label: string;
   title: string;
+  model: string;
   description: string;
   state: DevelopmentFlowState;
   lead?: boolean;
@@ -25,7 +26,7 @@ export function DevelopmentStation(props: DevelopmentStationProps) {
       className={`development-station ${props.lead ? "development-station--lead" : ""}`}
       data-station-id={props.id}
       data-state={props.state}
-      aria-label={`${props.title}, ${getDevelopmentStateLabel(props.state)}`}
+      aria-label={`${props.title}, ${props.model}, ${getDevelopmentStateLabel(props.state)}`}
     >
       <div className="development-station__desk" aria-hidden="true">
         <span className="development-station__screen"><Icon size={props.lead ? 24 : 17} /></span>
@@ -34,6 +35,7 @@ export function DevelopmentStation(props: DevelopmentStationProps) {
       </div>
       <div className="development-station__copy">
         <span>{props.label}</span>
+        <em>{props.model}</em>
         <strong>{props.title}</strong>
         <small>{getDevelopmentStateLabel(props.state)}</small>
         <p>{props.description}</p>

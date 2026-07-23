@@ -15,6 +15,7 @@ import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
 import {
   ClaudeOffice,
+  getDevelopmentExchange,
   getDevelopmentStationState,
   getImplementationPlanIndex,
   shouldShowImplementationActivity,
@@ -217,11 +218,22 @@ test("Claude stations map coding, testing, and Git approval states", () => {
   const coding = createJob("job-coding", "코딩 작업", "coding");
   const testing = createJob("job-testing", "테스트 작업", "testing");
   const changesReady = createJob("job-ready", "검토 작업", "changes_ready");
+  const publishing = createJob("job-publishing", "Git 작업", "publishing");
 
   assert.equal(getDevelopmentStationState("implementation", coding), "working");
   assert.equal(getDevelopmentStationState("implementation", testing), "complete");
   assert.equal(getDevelopmentStationState("verification", testing), "working");
   assert.equal(getDevelopmentStationState("publisher", changesReady), "waiting");
+  assert.equal(getImplementationPlanIndex(testing), 3);
+  assert.equal(getImplementationPlanIndex(publishing), 5);
+  assert.deepEqual(getDevelopmentExchange(coding), {
+    from: "Opus 팀장",
+    to: "Sonnet 구현",
+    message: "구현 지시 전달 · 막히는 내용은 근거와 함께 팀장에게 보고합니다.",
+    tone: "active",
+  });
+  assert.equal(getDevelopmentExchange(testing).to, "Sonnet 검증");
+  assert.equal(getDevelopmentExchange(publishing).to, "Haiku Git");
 });
 
 test("analysis failures never look like Claude code failures", () => {
@@ -235,7 +247,7 @@ test("analysis failures never look like Claude code failures", () => {
   const markup = renderToStaticMarkup(<ClaudeOffice job={failed} runtimeLabel="CodeLLMPro" />);
   assert.match(markup, /업무 수령 대기/u);
   assert.match(markup, /분석팀이 문제를 해결한 뒤/u);
-  assert.doesNotMatch(markup, /Claude 작업 현황/u);
+  assert.doesNotMatch(markup, /개발팀 작업 현황/u);
   assert.doesNotMatch(markup, /코드 수정 실패/u);
 });
 
@@ -304,7 +316,15 @@ test("Claude team shows a safe implementation plan and verified file targets", (
   };
   const markup = renderToStaticMarkup(<ClaudeOffice job={job} runtimeLabel="CodeLLMPro" />);
 
-  assert.match(markup, /Claude 작업 현황/u);
+  assert.match(markup, /개발팀 작업 현황/u);
+  assert.match(markup, /Opus · Sonnet · Haiku 협업 런타임/u);
+  assert.match(markup, /클로드 팀장/u);
+  assert.match(markup, /Claude Opus/u);
+  assert.equal((markup.match(/Claude Sonnet/gu) ?? []).length, 4);
+  assert.match(markup, /Claude Haiku/u);
+  assert.match(markup, /TEAM HANDOFF/u);
+  assert.match(markup, /Opus 팀장/u);
+  assert.match(markup, /Sonnet 구현/u);
   assert.match(markup, /허용된 경로에서 코드 구현/u);
   assert.match(markup, /읽기 버퍼 상한과 경계 검증을 함께 확장/u);
   assert.match(markup, /poc\/simulator\/src/u);
