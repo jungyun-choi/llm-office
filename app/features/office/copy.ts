@@ -1,22 +1,22 @@
 export const OFFICE_COPY = {
   metadata: {
-    title: "Louvre Forge | 온라인 개발 오피스",
+    title: "Louvre AI 에이전트 개발 오피스",
     description:
-      "Louvre 시뮬레이터의 분석팀, 검토팀, 개발팀이 함께 움직이는 온라인 개발 오피스",
+      "Louvre 시뮬레이터의 분석팀, 검토팀, 개발팀이 함께 움직이는 AI 에이전트 개발 오피스",
     openGraphDescription:
       "오비트에게 업무를 맡기고 Louvre 분석, 사람 승인, Claude 구현과 PR 검토를 팀별로 확인하세요.",
-    twitterDescription: "Louvre의 세 팀이 함께 움직이는 온라인 개발 오피스",
+    twitterDescription: "Louvre의 세 팀이 함께 움직이는 AI 에이전트 개발 오피스",
   },
   header: {
-    brand: "LOUVRE FORGE",
-    brandDescription: "ONLINE DEVELOPMENT OFFICE",
+    brand: "LOUVRE AI OFFICE",
+    brandDescription: "AI AGENT DEVELOPMENT OFFICE",
     connections: {
       checking: "연결 확인 중",
       codex: "Codex POC 연결됨",
       opencode: "OpenCode POC 연결됨",
-      server: "Louvre Forge 단일 서버 연결됨",
+      server: "Louvre AI 오피스 단일 서버 연결됨",
       demo: "안전한 시연 모드",
-      disconnected: "Louvre Forge 단일 서버 연결 끊김",
+      disconnected: "Louvre AI 오피스 단일 서버 연결 끊김",
     },
     connectionShort: {
       checking: "ZEN 확인 중",
@@ -68,8 +68,8 @@ export const OFFICE_COPY = {
     maxError: "업무 설명은 2,000자 이내로 작성해 주세요.",
   },
   floor: {
-    eyebrow: "LOUVRE FORGE · ENGINEERING HQ",
-    title: "Louvre 온라인 개발 오피스",
+    eyebrow: "LOUVRE AI OFFICE · ENGINEERING HQ",
+    title: "Louvre AI 에이전트 개발 오피스",
     idleTask: "새 업무를 기다리고 있어요",
     taskLabel: "현재 업무",
     collaborationTable: "중앙 협업 테이블",
@@ -151,7 +151,7 @@ export const OFFICE_COPY = {
   accessibility: {
     skipToMain: "본문으로 건너뛰기",
     workflowUpdates: "업무 진행 알림",
-    officeAgents: "Louvre Forge 에이전트 좌석",
+    officeAgents: "Louvre AI 에이전트 개발 오피스 좌석",
     resultCount: "보관된 결과 수",
   },
 } as const;

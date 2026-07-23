@@ -63,7 +63,7 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
     <section className="company-operations" aria-labelledby="company-operations-title">
       <header className="company-operations__header">
         <div>
-          <span>LOUVRE FORGE · LIVE TEAMS</span>
+          <span>LOUVRE AI OFFICE · LIVE TEAMS</span>
           <h2 id="company-operations-title">실시간 오피스</h2>
         </div>
         <p>분석 · 검토 · 개발</p>

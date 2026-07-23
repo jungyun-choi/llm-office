@@ -40,15 +40,15 @@ test("uses a trusted public origin even when proxy headers are hostile", async (
   );
 });
 
-test("server-renders the Louvre Forge floor", async () => {
+test("server-renders the Louvre AI agent development office", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /<html lang="ko">/i);
-  assert.match(html, /<title>Louvre Forge \| 온라인 개발 오피스<\/title>/i);
-  assert.match(html, /Louvre 온라인 개발 오피스/);
+  assert.match(html, /<title>Louvre AI 에이전트 개발 오피스<\/title>/i);
+  assert.match(html, /Louvre AI 에이전트 개발 오피스/);
   assert.match(html, /실시간 오피스/);
   assert.match(html, /구현 승인 · Git 승인 · PR 최종 검토/);
   assert.match(html, /오비트에게 요청/);
