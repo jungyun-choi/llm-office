@@ -473,8 +473,12 @@
   line-height: 1.2;
 }
 
+.result-drawer header > div > span {
+  font-size: 11px;
+}
+
 .result-drawer header p {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .result-drawer__content {
@@ -488,18 +492,19 @@
 .result-request span,
 .git-draft-card span,
 .result-engine-card > div > span {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .result-request p {
-  font-size: 15px;
+  font-size: 17px;
+  line-height: 1.65;
 }
 
 .result-summary {
   max-width: 980px;
   margin: 24px 2px;
   color: #344742;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.75;
 }
 
@@ -508,16 +513,17 @@
 }
 
 .result-engine-card strong {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .result-engine-card__route,
 .result-engine-card__metrics {
-  font-size: 11px;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .result-engine-card > code {
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .role-output-section,
@@ -528,7 +534,7 @@
 .role-output-section > h3,
 .work-breakdown > h3 {
   margin-bottom: 12px;
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .role-output-list {
@@ -543,15 +549,16 @@
 }
 
 .role-output summary strong {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .role-output summary small {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .role-output summary p {
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .role-output > div {
@@ -560,8 +567,8 @@
 
 .role-output > div > ul li {
   margin-top: 7px;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.75;
 }
 
 .role-output > div > section {
@@ -570,12 +577,12 @@
 }
 
 .role-output > div > section span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .role-output > div > section code {
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .result-sections {
@@ -589,12 +596,12 @@
 }
 
 .result-sections h3 {
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .result-sections li {
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.75;
 }
 
 .work-breakdown ol {
@@ -607,38 +614,42 @@
 }
 
 .work-breakdown__effort {
-  width: 36px;
-  height: 30px;
-  font-size: 10px;
+  width: 44px;
+  height: 34px;
+  font-size: 12px;
 }
 
 .work-breakdown li strong,
 .git-draft-card strong {
-  font-size: 13px;
+  font-size: 17px;
 }
 
 .work-breakdown li small,
 .work-breakdown li p,
-.git-draft-card pre,
 .result-notices p {
-  font-size: 11px;
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 .git-draft-card {
-  padding: 18px;
+  gap: 16px;
+  padding: 22px;
 }
 
 .git-draft-card__labels code {
-  font-size: 9px;
+  padding: 5px 9px;
+  font-size: 12px;
 }
 
 .git-draft-card pre {
-  max-height: 360px;
-  padding: 15px;
+  max-height: 520px;
+  padding: 22px;
+  font-size: 16px;
+  line-height: 1.75;
 }
 
 .result-notices {
-  padding: 14px 16px;
+  padding: 17px 18px;
 }
 
 .result-review-feedback,
@@ -658,7 +669,7 @@
 .analysis-review-form__context small {
   color: #5f6d68;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 760;
   letter-spacing: .06em;
 }
@@ -666,7 +677,7 @@
 .result-review-feedback p {
   margin: 7px 0 0;
   color: #3d4b47;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.7;
   white-space: pre-wrap;
 }
@@ -685,13 +696,13 @@
   display: block;
   margin-top: 4px;
   color: #17373a;
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .result-review-action p {
   margin: 4px 0 0;
   color: #53635f;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
