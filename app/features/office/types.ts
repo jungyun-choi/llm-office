@@ -51,6 +51,15 @@ export type DevelopmentStationId = "claude" | "implementation" | "verification" 
 export type DevelopmentFlowState = "idle" | "queued" | "working" | "waiting" | "complete" | "error";
 export type DevelopmentRole = "lead" | "implementation" | "verification" | "git";
 export type DevelopmentResumeStage = "implementation" | "verification" | "git";
+export type OfficeDevelopmentPart = "claude" | "opencode";
+export type OfficeTaskDifficultyLevel = "easy" | "normal" | "hard" | "critical";
+
+export interface OfficeDifficultyAssessment {
+  level: OfficeTaskDifficultyLevel;
+  score?: number;
+  summary?: string;
+  recommendedPart?: OfficeDevelopmentPart;
+}
 
 export interface OfficeDevelopmentQuestion {
   id: string;
@@ -179,6 +188,10 @@ export interface OfficeCapabilities {
   canPush: boolean;
   analysisRuntimeLabel?: string;
   codingRuntimeLabel?: string;
+  codingRuntimes?: {
+    claude?: string;
+    opencode?: string;
+  };
 }
 
 export interface OfficeChangedFile {
@@ -305,6 +318,8 @@ export interface OfficeJob {
   analysisStages: readonly OfficeAnalysisStage[];
   coding?: OfficeCodingResult;
   codingPlan?: OfficeCodingPlan;
+  difficultyAssessment?: OfficeDifficultyAssessment;
+  developmentPart?: OfficeDevelopmentPart;
   error?: OfficeJobError;
   developmentQuestion?: OfficeDevelopmentQuestion;
   events: readonly OfficeJobEvent[];

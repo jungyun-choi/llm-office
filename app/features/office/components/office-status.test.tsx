@@ -19,6 +19,8 @@ import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
 import {
   ClaudeOffice,
   getDevelopmentExchange,
+  getDevelopmentPart,
+  getRecommendedDevelopmentPart,
   getDevelopmentStationState,
   getImplementationPlanIndex,
   shouldShowImplementationActivity,
@@ -428,7 +430,7 @@ test("human review pressure uses real queue depth and wait age without an explic
   assert.equal(clear.label, "검토 대기 없음");
 });
 
-test("Claude team shows a safe implementation plan and verified file targets", () => {
+test("dual development parts show Claude and OpenCode teams while preserving the active implementation", () => {
   const job: OfficeJob = {
     ...createJob("job-live-coding", "Read buffer를 확장해줘", "coding"),
     codingPlan: {
@@ -440,8 +442,9 @@ test("Claude team shows a safe implementation plan and verified file targets", (
   };
   const markup = renderToStaticMarkup(<ClaudeOffice job={job} runtimeLabel="CodeLLMPro" />);
 
-  assert.match(markup, /개발팀 작업 현황/u);
-  assert.match(markup, /Opus · Sonnet · Haiku 협업 런타임/u);
+  assert.match(markup, /개발 1파트 작업 현황/u);
+  assert.match(markup, /DEVELOPMENT PART 1 · CLAUDE/u);
+  assert.match(markup, /DEVELOPMENT PART 2 · OPENCODE/u);
   assert.match(markup, /아틀라스/u);
   assert.match(markup, /메이슨/u);
   assert.match(markup, /베라/u);
@@ -449,11 +452,39 @@ test("Claude team shows a safe implementation plan and verified file targets", (
   assert.match(markup, /Claude Opus/u);
   assert.equal((markup.match(/Claude Sonnet/gu) ?? []).length, 4);
   assert.match(markup, /Claude Haiku/u);
+  assert.match(markup, /아르고/u);
+  assert.match(markup, /코어/u);
+  assert.match(markup, /센티널/u);
+  assert.match(markup, /브릿지/u);
+  assert.match(markup, /OpenCode · Lead/u);
   assert.match(markup, /TEAM HANDOFF/u);
   assert.match(markup, /허용된 경로에서 코드 구현/u);
   assert.match(markup, /읽기 버퍼 상한과 경계 검증을 함께 확장/u);
   assert.match(markup, /poc\/simulator\/src/u);
   assert.match(markup, /실제 변경 파일은 Claude 실행이 끝나는 즉시 표시됩니다/u);
+});
+
+test("difficulty recommends a development part and explicit assignment wins", () => {
+  const easy = {
+    ...createJob("job-easy", "단순 파라미터 기본값 변경", "awaiting_coding_approval"),
+    difficultyAssessment: {
+      level: "easy" as const,
+      score: 2,
+      summary: "변경 경로와 검증 범위가 작습니다.",
+    },
+  };
+  const assigned = { ...easy, developmentPart: "opencode" as const, state: "coding" as const };
+
+  assert.equal(getRecommendedDevelopmentPart(easy), "opencode");
+  assert.equal(getDevelopmentPart(easy), undefined);
+  assert.equal(getDevelopmentPart(assigned), "opencode");
+
+  const markup = renderToStaticMarkup(<ClaudeOffice job={assigned} opencodeRuntimeLabel="CodeLLMPro" />);
+  assert.match(markup, /종합 난이도 · 쉬움/u);
+  assert.match(markup, /개발 2파트 배정/u);
+  assert.match(markup, /CodeLLMPro/u);
+  assert.match(markup, /개발 2파트 작업 현황/u);
+  assert.match(markup, /실제 변경 파일은 OpenCode 실행이 끝나는 즉시 표시됩니다/u);
 });
 
 test("company analysis progress activates only the current specialist", () => {

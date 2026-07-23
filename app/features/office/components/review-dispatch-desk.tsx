@@ -40,7 +40,7 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
         <span className="review-packet__source">OpenCode</span>
         <span className="review-packet__paper"><FileText size={22} /></span>
         <ArrowRight size={18} />
-        <span className="review-packet__destination">Claude</span>
+        <span className="review-packet__destination">개발팀</span>
       </div>
       <div className="review-dispatch__status" role="status">
         <span>{getReviewEyebrow(props.job)}</span>
@@ -139,7 +139,7 @@ function FinalReviewGate(props: ReviewDispatchDeskProps & { job: OfficeJob }) {
         </p>
       )}
       <label className="final-review-gate__feedback">
-        <span><MessageSquareText size={15} aria-hidden="true" />Claude 재개발 요청</span>
+        <span><MessageSquareText size={15} aria-hidden="true" />개발팀 재개발 요청</span>
         <textarea
           value={feedback}
           maxLength={4_000}
@@ -235,7 +235,7 @@ function canPublishAndPush(job: OfficeJob | null, capabilities: OfficeCapabiliti
 function getReviewEyebrow(job: OfficeJob | null): string {
   if (!job) return "EMPTY DESK";
   if (job.state === "awaiting_coding_approval") return "PACKET READY";
-  if (job.state === "awaiting_development_input") return "ATLAS QUESTION";
+  if (job.state === "awaiting_development_input") return "DEVELOPMENT QUESTION";
   if (job.state === "changes_ready") return "CHANGES READY";
   if (job.state === "review_pending") return "FINAL REVIEW";
   if (job.state === "merging") return "MERGING PR";

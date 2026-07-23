@@ -129,7 +129,7 @@ function InlineAction(props: { job: OfficeJob; busy: boolean; onAction: JobItemP
 export function getJobStateLabel(state: OfficeJobState): string {
   const labels: Record<OfficeJobState, string> = {
     queued: "분석 대기", analyzing: "OpenCode 분석 중", awaiting_coding_approval: "구현 승인 대기",
-    coding_queued: "Claude 대기", coding: "Claude 구현 중", testing: "테스트 중",
+    coding_queued: "개발 대기", coding: "구현 중", testing: "테스트 중",
     awaiting_development_input: "개발팀 질문 대기",
     changes_ready: "Git 승인 대기", publishing: "Git 반영 중", review_pending: "PR 최종 검토", merging: "PR 머지 중", completed: "완료",
     failed: "문제 발생", canceled: "취소",

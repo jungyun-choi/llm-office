@@ -153,6 +153,27 @@ test("development questions are normalized for the Atlas meeting room", () => {
   assert.equal(job.actions.answerDevelopmentQuestion, true);
 });
 
+test("difficulty and development part fields remain optional and forward compatible", () => {
+  const job = parseJobPayload({
+    ...BASE_JOB,
+    difficultyAssessment: {
+      level: "high",
+      score: 4,
+      rationale: "SystemC 타이밍과 FTL 경로를 함께 변경합니다.",
+      recommendedPart: "claude",
+    },
+    developmentAssignment: { part: "opencode" },
+  });
+
+  assert.deepEqual(job.difficultyAssessment, {
+    level: "hard",
+    score: 4,
+    summary: "SystemC 타이밍과 FTL 경로를 함께 변경합니다.",
+    recommendedPart: "claude",
+  });
+  assert.equal(job.developmentPart, "opencode");
+});
+
 test("list and capabilities accept the single-server response shape", () => {
   const compactJob = {
     id: BASE_JOB.id,
@@ -188,6 +209,10 @@ test("list and capabilities accept the single-server response shape", () => {
     apiVersion: "v1",
     analysis: { enabled: true, available: true, label: "OpenCode Internal" },
     coding: { enabled: true, available: true, model: "CodeLLMPro" },
+    codingRuntimes: {
+      claude: { label: "Claude Enterprise" },
+      opencode: { label: "CodeLLMPro" },
+    },
     publishing: { commitAvailable: true, pushEnabled: false },
   });
 
@@ -199,6 +224,10 @@ test("list and capabilities accept the single-server response shape", () => {
   assert.equal(list.jobs[0]?.coding?.diff, undefined);
   assert.equal(capabilities.analysisRuntimeLabel, "OpenCode Internal");
   assert.equal(capabilities.codingRuntimeLabel, "CodeLLMPro");
+  assert.deepEqual(capabilities.codingRuntimes, {
+    claude: "Claude Enterprise",
+    opencode: "CodeLLMPro",
+  });
   assert.equal(capabilities.canCommit, true);
   assert.equal(capabilities.canPush, false);
 });

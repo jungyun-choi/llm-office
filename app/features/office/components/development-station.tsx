@@ -17,6 +17,7 @@ interface DevelopmentStationProps {
   description: string;
   state: DevelopmentFlowState;
   lead?: boolean;
+  team?: "claude" | "opencode";
 }
 
 export function DevelopmentStation(props: DevelopmentStationProps) {
@@ -25,6 +26,7 @@ export function DevelopmentStation(props: DevelopmentStationProps) {
     <article
       className={`development-station ${props.lead ? "development-station--lead" : ""}`}
       data-station-id={props.id}
+      data-team={props.team ?? "claude"}
       data-state={props.state}
       aria-label={`${props.title}, ${props.model}, ${getDevelopmentStateLabel(props.state)}`}
     >

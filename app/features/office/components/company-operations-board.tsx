@@ -32,9 +32,9 @@ const TEAM_DEFINITIONS = [
   },
   {
     id: "development",
-    eyebrow: "TEAM C · CLAUDE",
+    eyebrow: "TEAM C · DUAL RUNTIME",
     title: "개발팀",
-    description: "코드 수정 · 테스트 · Git 게시",
+    description: "개발 1파트 Claude · 개발 2파트 OpenCode",
     icon: Code2,
   },
 ] as const;
@@ -271,12 +271,12 @@ function getTeamActivity(job: OfficeJob): string {
     return running?.summary ?? (agent ? `${agent.name}가 근거를 정리하는 중` : "전문 에이전트가 분석하는 중");
   }
   if (job.state === "awaiting_coding_approval") return "분석 패킷 확인과 구현 승인이 필요합니다";
-  if (job.state === "awaiting_development_input") return "아틀라스가 개발 중 판단을 요청했습니다";
+  if (job.state === "awaiting_development_input") return `${job.developmentPart === "opencode" ? "아르고" : "아틀라스"}가 개발 중 판단을 요청했습니다`;
   if (job.state === "changes_ready") return "변경 파일과 테스트 결과의 Git 승인이 필요합니다";
   if (job.state === "review_pending") return "GitHub PR 검토와 최종 결정이 필요합니다";
   if (job.state === "merging") return "승인된 PR의 머지 상태를 확인하는 중";
-  if (job.state === "coding_queued") return job.queuePosition ? `개발팀 대기열 ${job.queuePosition}번째` : "Claude 실행 순서를 기다리는 중";
-  if (job.state === "coding") return job.events.at(-1)?.message ?? "Claude가 승인된 범위의 코드를 수정하는 중";
+  if (job.state === "coding_queued") return job.queuePosition ? `개발팀 대기열 ${job.queuePosition}번째` : "배정된 개발 파트의 실행 순서를 기다리는 중";
+  if (job.state === "coding") return job.events.at(-1)?.message ?? "배정된 개발 파트가 승인 범위의 코드를 수정하는 중";
   if (job.state === "testing") return "변경 코드의 허용된 테스트를 실행하는 중";
   return "승인된 변경을 Git에 반영하는 중";
 }

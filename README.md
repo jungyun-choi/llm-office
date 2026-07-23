@@ -217,5 +217,6 @@ OpenCode 경로는 런타임을 명시적으로 선택한 로컬 환경에서만
 - [세 팀 실행·승인 흐름](docs/DUAL_OFFICE_WORKFLOW.md)
 - [사내 OpenCode 5+1 순차 분석 연동](docs/COMPANY_SEQUENTIAL_ANALYSIS.md)
 - [Claude용 사내 연동 인계서](docs/CLAUDE_COMPANY_INTEGRATION.md)
+- [개발 1파트·2파트 백엔드 연동](docs/DUAL_DEVELOPMENT_PARTS_BACKEND_GUIDE.md)
 - [시스템 아키텍처](docs/ARCHITECTURE.md)
 - [보안 및 위협 모델](docs/SECURITY.md)

@@ -1,10 +1,15 @@
-import { ArrowRight, Bot, Check, CircleDot, FileCode2, ListChecks, Radio } from "lucide-react";
+import { ArrowRight, Bot, Check, CircleDot, FileCode2, Gauge, ListChecks, Radio } from "lucide-react";
 
-import type { DevelopmentFlowState, DevelopmentStationId, OfficeJob } from "../types";
+import type {
+  DevelopmentFlowState,
+  DevelopmentStationId,
+  OfficeDevelopmentPart,
+  OfficeJob,
+} from "../types";
 import { CodingResultPanel } from "./coding-result-panel";
 import { DevelopmentStation } from "./development-station";
 
-const PHASES: readonly {
+const CLAUDE_PHASES: readonly {
   id: Exclude<DevelopmentStationId, "claude">;
   label: string;
   title: string;
@@ -34,47 +39,173 @@ const PHASES: readonly {
   },
 ];
 
+const OPENCODE_PHASES: typeof CLAUDE_PHASES = [
+  {
+    id: "implementation",
+    label: "BUILDER · 구현 담당",
+    title: "코어",
+    model: "OpenCode · Build",
+    description: "아르고의 지시에 따라 단순·반복 구현을 빠르게 처리",
+  },
+  {
+    id: "verification",
+    label: "VERIFIER · 검증 담당",
+    title: "센티널",
+    model: "OpenCode · Verify",
+    description: "변경 범위와 회귀 테스트 결과를 독립 검증",
+  },
+  {
+    id: "publisher",
+    label: "RELEASE · Git 담당",
+    title: "브릿지",
+    model: "OpenCode · Git",
+    description: "승인된 변경의 Commit · Push · PR 처리",
+  },
+];
+
+const PART_DEFINITIONS = {
+  claude: {
+    eyebrow: "DEVELOPMENT PART 1 · CLAUDE",
+    title: "개발 1파트",
+    specialty: "고난도 · 복합 변경",
+    leadName: "아틀라스",
+    leadModel: "Claude Opus",
+    leadLabel: "TEAM LEAD · OPUS",
+    phases: CLAUDE_PHASES,
+  },
+  opencode: {
+    eyebrow: "DEVELOPMENT PART 2 · OPENCODE",
+    title: "개발 2파트",
+    specialty: "저난도 · 정형 구현",
+    leadName: "아르고",
+    leadModel: "OpenCode · Lead",
+    leadLabel: "TEAM LEAD · OPENCODE",
+    phases: OPENCODE_PHASES,
+  },
+} as const;
+
 interface ClaudeOfficeProps {
   job: OfficeJob | null;
   runtimeLabel?: string;
+  opencodeRuntimeLabel?: string;
 }
 
-export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
-  const leadState = getDevelopmentStationState("claude", job);
+export function ClaudeOffice({ job, runtimeLabel, opencodeRuntimeLabel }: ClaudeOfficeProps) {
+  const assignedPart = getDevelopmentPart(job);
+  const unassignedFailure = job && isPreDevelopmentFailure(job) ? job : null;
+  const claudeJob = assignedPart === "claude" ? job : unassignedFailure;
+  const opencodeJob = assignedPart === "opencode" ? job : unassignedFailure;
   return (
-    <section className="campus-office campus-office--claude" aria-labelledby="claude-office-title">
+    <section className="campus-office campus-office--claude campus-office--development" aria-labelledby="development-office-title">
       <header className="campus-office__header">
         <span className="campus-office__icon"><Bot size={18} aria-hidden="true" /></span>
         <div>
-          <small>TEAM C · DEVELOPMENT</small>
-          <h2 id="claude-office-title">개발팀</h2>
-          <p title={runtimeLabel}>Opus · Sonnet · Haiku 협업 런타임</p>
+          <small>TEAM C · DEVELOPMENT DIVISION</small>
+          <h2 id="development-office-title">개발팀</h2>
+          <p>업무 난이도에 따라 두 파트가 독립적으로 구현합니다</p>
         </div>
         <span className="campus-office__state">{getClaudeOfficeState(job)}</span>
       </header>
+      <DevelopmentRouting job={job} assignedPart={assignedPart} />
+      <div className="development-parts" aria-label="개발팀 파트 배치">
+        <DevelopmentPart
+          part="claude"
+          job={claudeJob}
+          selectedJob={job}
+          assignedPart={assignedPart}
+          runtimeLabel={runtimeLabel ?? "Claude Opus · Sonnet · Haiku"}
+        />
+        <DevelopmentPart
+          part="opencode"
+          job={opencodeJob}
+          selectedJob={job}
+          assignedPart={assignedPart}
+          runtimeLabel={opencodeRuntimeLabel ?? "사내 OpenCode 런타임"}
+        />
+      </div>
+      {assignedPart && shouldShowImplementationActivity(job) && (
+        <ImplementationActivityPanel job={job as OfficeJob} part={assignedPart} />
+      )}
+      {job?.coding && hasCodingArtifacts(job) && <CodingResultPanel coding={job.coding} />}
+    </section>
+  );
+}
+
+function DevelopmentRouting(props: {
+  job: OfficeJob | null;
+  assignedPart?: OfficeDevelopmentPart;
+}) {
+  const difficulty = props.job?.difficultyAssessment;
+  const recommendedPart = difficulty?.recommendedPart ?? getRecommendedDevelopmentPart(props.job);
+  return (
+    <div className="development-routing" data-level={difficulty?.level ?? "pending"}>
+      <span className="development-routing__icon"><Gauge size={17} aria-hidden="true" /></span>
+      <div>
+        <small>WORK ROUTING</small>
+        <strong>
+          {difficulty
+            ? `종합 난이도 · ${getDifficultyLabel(difficulty.level)}${difficulty.score ? ` · ${difficulty.score}/5` : ""}`
+            : "종합 난이도 평가 대기"}
+        </strong>
+        <p>{difficulty?.summary ?? "분석팀의 난이도 평가가 도착하면 검토팀에서 개발 파트를 결정합니다."}</p>
+      </div>
+      <span className="development-routing__decision">
+        {props.assignedPart
+          ? `${getDevelopmentPartLabel(props.assignedPart)} 배정`
+          : recommendedPart
+            ? `${getDevelopmentPartLabel(recommendedPart)} 권장`
+            : "파트 배정 대기"}
+      </span>
+    </div>
+  );
+}
+
+function DevelopmentPart(props: {
+  part: OfficeDevelopmentPart;
+  job: OfficeJob | null;
+  selectedJob: OfficeJob | null;
+  assignedPart?: OfficeDevelopmentPart;
+  runtimeLabel: string;
+}) {
+  const definition = PART_DEFINITIONS[props.part];
+  return (
+    <section
+      className={`development-part development-part--${props.part}`}
+      data-active={props.job ? "true" : "false"}
+      aria-labelledby={`development-part-${props.part}`}
+    >
+      <header className="development-part__header">
+        <div>
+          <small>{definition.eyebrow}</small>
+          <h3 id={`development-part-${props.part}`}>{definition.title}</h3>
+          <p>{definition.specialty}</p>
+        </div>
+        <span>{getDevelopmentPartState(props.part, props.selectedJob, props.assignedPart)}</span>
+      </header>
+      <p className="development-part__runtime" title={props.runtimeLabel}>{props.runtimeLabel}</p>
       <div className="claude-station-grid">
         <DevelopmentStation
           id="claude"
-          label="TEAM LEAD · OPUS"
-          title="아틀라스"
-          model="Claude Opus"
-          description={`개발팀장 · ${getClaudeActivity(job)}`}
-          state={leadState}
+          label={definition.leadLabel}
+          title={definition.leadName}
+          model={definition.leadModel}
+          description={`${definition.title} 팀장 · ${getClaudeActivity(props.job)}`}
+          state={getDevelopmentStationState("claude", props.job)}
+          team={props.part}
           lead
         />
-        <DevelopmentTeamExchange job={job} />
-        <div className="claude-phase-row" aria-label="Claude 구현 단계">
-          {PHASES.map((phase) => (
+        <DevelopmentTeamExchange job={props.job} part={props.part} />
+        <div className="claude-phase-row" aria-label={`${definition.title} 구현 단계`}>
+          {definition.phases.map((phase) => (
             <DevelopmentStation
               key={phase.id}
               {...phase}
-              state={getDevelopmentStationState(phase.id, job)}
+              team={props.part}
+              state={getDevelopmentStationState(phase.id, props.job)}
             />
           ))}
         </div>
       </div>
-      {shouldShowImplementationActivity(job) && <ImplementationActivityPanel job={job as OfficeJob} />}
-      {job?.coding && hasCodingArtifacts(job) && <CodingResultPanel coding={job.coding} />}
     </section>
   );
 }
@@ -88,10 +219,21 @@ const IMPLEMENTATION_PLAN = [
   "릴레이 · Git · PR",
 ] as const;
 
+const OPENCODE_IMPLEMENTATION_PLAN = [
+  "아르고 · 계획",
+  "코어 · 구현",
+  "아르고 · 코드 리뷰",
+  "센티널 · 검증",
+  "아르고 · 최종 판단",
+  "브릿지 · Git · PR",
+] as const;
+
 type ImplementationPlanState = "pending" | "active" | "completed" | "failed";
 
-function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
+function ImplementationActivityPanel({ job, part }: { job: OfficeJob; part: OfficeDevelopmentPart }) {
   const changedFiles = job.coding?.changedFiles ?? [];
+  const plan = part === "claude" ? IMPLEMENTATION_PLAN : OPENCODE_IMPLEMENTATION_PLAN;
+  const teamLabel = getDevelopmentPartLabel(part);
   const targetPaths = changedFiles.length > 0
     ? changedFiles.map((file) => file.path)
     : job.codingPlan?.allowedPaths ?? [];
@@ -101,7 +243,7 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
       <header>
         <div>
           <small><Radio size={13} aria-hidden="true" />IMPLEMENTATION LIVE</small>
-          <strong id={`claude-activity-${job.id}`}>개발팀 작업 현황</strong>
+          <strong id={`claude-activity-${job.id}`}>{teamLabel} 작업 현황</strong>
         </div>
         <span data-state={job.state}>{getClaudeOfficeState(job)}</span>
       </header>
@@ -114,7 +256,7 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
         <article className="claude-activity__plan">
           <span><ListChecks size={14} aria-hidden="true" />구현 계획</span>
           <ol>
-            {IMPLEMENTATION_PLAN.map((label, index) => {
+            {plan.map((label, index) => {
               const state = getImplementationPlanState(job, index);
               return (
                 <li key={label} data-status={state}>
@@ -135,7 +277,7 @@ function ImplementationActivityPanel({ job }: { job: OfficeJob }) {
             <p>작업 경로를 확인하는 중입니다.</p>
           )}
           {changedFiles.length === 0 && job.state === "coding" && (
-            <small>실제 변경 파일은 Claude 실행이 끝나는 즉시 표시됩니다.</small>
+            <small>실제 변경 파일은 {part === "claude" ? "Claude" : "OpenCode"} 실행이 끝나는 즉시 표시됩니다.</small>
           )}
         </article>
         <article className="claude-activity__log">
@@ -318,8 +460,8 @@ interface DevelopmentExchange {
   tone: "idle" | "active" | "blocked" | "complete";
 }
 
-function DevelopmentTeamExchange({ job }: { job: OfficeJob | null }) {
-  const exchange = getDevelopmentExchange(job);
+function DevelopmentTeamExchange({ job, part }: { job: OfficeJob | null; part: OfficeDevelopmentPart }) {
+  const exchange = getDevelopmentExchange(job, part);
   return (
     <div className="development-team-exchange" data-tone={exchange.tone} aria-live="polite">
       <span className="development-team-exchange__signal" aria-hidden="true"><Radio size={14} /></span>
@@ -337,11 +479,17 @@ function DevelopmentTeamExchange({ job }: { job: OfficeJob | null }) {
   );
 }
 
-export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchange {
+export function getDevelopmentExchange(
+  job: OfficeJob | null,
+  part: OfficeDevelopmentPart = "claude",
+): DevelopmentExchange {
+  const names = part === "claude"
+    ? { lead: "아틀라스", builder: "메이슨", verifier: "베라", publisher: "릴레이", team: "개발 1파트" }
+    : { lead: "아르고", builder: "코어", verifier: "센티널", publisher: "브릿지", team: "개발 2파트" };
   if (!job || ["queued", "analyzing", "canceled"].includes(job.state) || isPreDevelopmentFailure(job)) {
     return {
       from: "검토팀",
-      to: "아틀라스",
+      to: names.lead,
       message: "승인된 구현 패킷을 기다리고 있습니다.",
       tone: "idle",
     };
@@ -349,31 +497,31 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   if (job.state === "awaiting_coding_approval") {
     return {
       from: "검토팀",
-      to: "아틀라스",
+      to: names.lead,
       message: "분석 패킷을 함께 검토하고 개발 사전 미팅을 준비합니다.",
       tone: "idle",
     };
   }
   if (job.state === "coding_queued") {
     return {
-      from: "아틀라스",
-      to: "메이슨",
+      from: names.lead,
+      to: names.builder,
       message: "분석 패킷을 검토하고 구현 순서와 작업 지시를 준비합니다.",
       tone: "active",
     };
   }
   if (job.state === "coding") {
     return {
-      from: "아틀라스",
-      to: "메이슨",
+      from: names.lead,
+      to: names.builder,
       message: "구현 지시 전달 · 막히는 내용은 근거와 함께 팀장에게 보고합니다.",
       tone: "active",
     };
   }
   if (job.state === "awaiting_development_input") {
-    const reporter = getDevelopmentReporterName(job);
+    const reporter = getDevelopmentReporterName(job, part);
     return {
-      from: "아틀라스",
+      from: names.lead,
       to: "검토팀",
       message: `${reporter}의 보고를 검토했습니다. 추측으로 진행하지 않고 사람의 판단을 기다립니다.`,
       tone: "blocked",
@@ -381,31 +529,31 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   }
   if (job.state === "testing") {
     return {
-      from: "메이슨",
-      to: "베라",
+      from: names.builder,
+      to: names.verifier,
       message: "변경 파일과 구현 결과를 인계해 독립 검증을 진행합니다.",
       tone: "active",
     };
   }
   if (job.state === "changes_ready") {
     return {
-      from: "베라",
-      to: "아틀라스",
+      from: names.verifier,
+      to: names.lead,
       message: "검증 결과를 보고하고 사용자의 Git 승인을 기다립니다.",
       tone: "complete",
     };
   }
   if (job.state === "publishing") {
     return {
-      from: "아틀라스",
-      to: "릴레이",
+      from: names.lead,
+      to: names.publisher,
       message: "사용자가 승인한 변경의 Commit · Push · PR 작업을 지시합니다.",
       tone: "active",
     };
   }
   if (["review_pending", "merging"].includes(job.state)) {
     return {
-      from: "릴레이",
+      from: names.publisher,
       to: "검토팀",
       message: "PR과 Git 결과를 전달해 사용자의 최종 코드 검토를 기다립니다.",
       tone: "complete",
@@ -413,7 +561,7 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   }
   if (job.state === "completed") {
     return {
-      from: "개발팀",
+      from: names.team,
       to: "검토팀",
       message: "구현·검증·Git 작업과 사람 검토가 모두 완료됐습니다.",
       tone: "complete",
@@ -421,28 +569,86 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   }
   if (job.state === "failed") {
     const from = job.error?.stage === "testing"
-      ? "베라"
+      ? names.verifier
       : job.error?.stage === "publishing"
-      ? "릴레이"
-      : "메이슨";
+      ? names.publisher
+      : names.builder;
     return {
       from,
-      to: "아틀라스",
+      to: names.lead,
       message: job.error?.message ?? "작업을 계속하기 위한 팀장 지시가 필요합니다.",
       tone: "blocked",
     };
   }
   return {
-    from: "아틀라스",
-    to: "개발팀",
+    from: names.lead,
+    to: names.team,
     message: "현재 업무 상태를 확인하고 있습니다.",
     tone: "idle",
   };
 }
 
-function getDevelopmentReporterName(job: OfficeJob): string {
+function getDevelopmentReporterName(job: OfficeJob, part: OfficeDevelopmentPart): string {
+  if (part === "opencode") {
+    if (job.developmentQuestion?.raisedBy === "implementation") return "코어";
+    if (job.developmentQuestion?.raisedBy === "verification") return "센티널";
+    if (job.developmentQuestion?.raisedBy === "git") return "브릿지";
+    return "아르고";
+  }
   if (job.developmentQuestion?.raisedBy === "implementation") return "메이슨";
   if (job.developmentQuestion?.raisedBy === "verification") return "베라";
   if (job.developmentQuestion?.raisedBy === "git") return "릴레이";
   return "아틀라스";
+}
+
+export function getDevelopmentPart(job: OfficeJob | null): OfficeDevelopmentPart | undefined {
+  if (!job) return undefined;
+  if (job.developmentPart) return job.developmentPart;
+  const runtime = `${job.coding?.runtimeLabel ?? ""} ${job.coding?.model ?? ""}`.toLowerCase();
+  if (runtime.includes("opencode") || runtime.includes("open code")) return "opencode";
+  if (runtime.includes("claude")) return "claude";
+  if (
+    job.coding
+    || [
+      "coding_queued",
+      "coding",
+      "testing",
+      "awaiting_development_input",
+      "changes_ready",
+      "publishing",
+      "review_pending",
+      "merging",
+      "completed",
+    ].includes(job.state)
+  ) return "claude";
+  return undefined;
+}
+
+export function getRecommendedDevelopmentPart(job: OfficeJob | null): OfficeDevelopmentPart | undefined {
+  const difficulty = job?.difficultyAssessment;
+  if (!difficulty) return undefined;
+  if (difficulty.recommendedPart) return difficulty.recommendedPart;
+  return difficulty.level === "hard" || difficulty.level === "critical" ? "claude" : "opencode";
+}
+
+function getDevelopmentPartLabel(part: OfficeDevelopmentPart): string {
+  return part === "claude" ? "개발 1파트" : "개발 2파트";
+}
+
+function getDifficultyLabel(level: NonNullable<OfficeJob["difficultyAssessment"]>["level"]): string {
+  if (level === "easy") return "쉬움";
+  if (level === "normal") return "보통";
+  if (level === "hard") return "어려움";
+  return "매우 어려움";
+}
+
+function getDevelopmentPartState(
+  part: OfficeDevelopmentPart,
+  job: OfficeJob | null,
+  assignedPart?: OfficeDevelopmentPart,
+): string {
+  if (assignedPart === part) return getClaudeOfficeState(job);
+  if (assignedPart) return "별도 업무 수령 가능";
+  if (job?.state === "awaiting_coding_approval") return "파트 배정 대기";
+  return "업무 수령 대기";
 }

@@ -11,6 +11,8 @@ import type {
   OfficeCodingResult,
   OfficeCodingTest,
   OfficeDevelopmentQuestion,
+  OfficeDevelopmentPart,
+  OfficeDifficultyAssessment,
   OfficeJob,
   OfficeJobActions,
   OfficeJobError,
@@ -43,6 +45,7 @@ const analysisStagePhaseSchema = z.enum(["preparing_context", "calling_model", "
 const developmentRoleSchema = z.enum(["lead", "implementation", "verification", "git"]);
 const developmentResumeStageSchema = z.enum(["implementation", "verification", "git"]);
 const developmentQuestionStatusSchema = z.enum(["open", "answered"]);
+const developmentPartSchema = z.enum(["claude", "opencode"]);
 const MAX_DIFF_LENGTH = 60_000;
 const MAX_OUTPUT_LENGTH = 16_000;
 
@@ -66,6 +69,9 @@ export function parseCapabilities(payload: unknown): OfficeCapabilities {
   const record = parseRecord(payload, "서버 기능 응답 형식이 올바르지 않습니다.");
   const source = asRecord(record.capabilities) ?? record;
   const publishing = asRecord(source.publishing);
+  const coding = asRecord(source.coding);
+  const codingRuntimes = asRecord(source.codingRuntimes ?? source.coding_runtimes)
+    ?? (coding && asRecord(coding.runtimes));
   return {
     canCommit: publishing
       ? readBoolean(publishing, ["commitAvailable", "commit"], true)
@@ -75,6 +81,10 @@ export function parseCapabilities(payload: unknown): OfficeCapabilities {
       : readBoolean(source, ["canPush", "push", "publishPush"], false),
     analysisRuntimeLabel: readNestedString(source, ["analysisRuntimeLabel", "analysisRuntime", "analysis"]),
     codingRuntimeLabel: readNestedString(source, ["codingRuntimeLabel", "codingRuntime", "coding"]),
+    codingRuntimes: codingRuntimes ? {
+      claude: readNestedString(codingRuntimes, ["claude"]),
+      opencode: readNestedString(codingRuntimes, ["opencode", "openCode"]),
+    } : undefined,
   };
 }
 
@@ -95,6 +105,7 @@ function normalizeJob(
   const state = parseJobState(record.state ?? record.status);
   if (!id || !state) throw new JobContractError("업무 식별자 또는 상태가 없습니다.");
   const codingPacket = asRecord(record.codingPacket ?? record.coding_packet);
+  const developmentAssignment = asRecord(record.developmentAssignment ?? record.development_assignment);
   const coding = normalizeCoding(record.coding ?? record.codingResult ?? record.coding_result);
   const analysis = unwrapAnalysis(record.analysis ?? record.result);
   const analysisRecord = asRecord(analysis);
@@ -119,6 +130,15 @@ function normalizeJob(
       ? { ...coding, baseSha: codingPacket && readString(codingPacket, ["sourceCommit", "source_commit"]) }
       : coding,
     codingPlan: normalizeCodingPlan(codingPacket),
+    difficultyAssessment: normalizeDifficultyAssessment(
+      record.difficultyAssessment ?? record.difficulty_assessment ?? record.difficulty,
+    ),
+    developmentPart: parseDevelopmentPart(
+      record.developmentPart
+        ?? record.development_part
+        ?? developmentAssignment?.part
+        ?? developmentAssignment?.developmentPart,
+    ),
     error: normalizeError(record.error),
     developmentQuestion: normalizeDevelopmentQuestion(
       record.developmentQuestion ?? record.development_question,
@@ -129,6 +149,58 @@ function normalizeJob(
     codingPacketDigest: readString(record, ["codingPacketDigest", "coding_packet_digest"])
       ?? readDigest(codingPacket),
   };
+}
+
+function normalizeDifficultyAssessment(value: unknown): OfficeDifficultyAssessment | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const score = Math.min(5, Math.max(1, value));
+    return { level: difficultyLevelFromScore(score), score };
+  }
+  if (typeof value === "string") {
+    const level = parseDifficultyLevel(value);
+    return level ? { level } : undefined;
+  }
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const score = readNumber(record, ["score", "overallScore", "overall_score"]);
+  const level = parseDifficultyLevel(readString(record, ["level", "grade", "category"]))
+    ?? (score !== undefined ? difficultyLevelFromScore(score) : undefined);
+  if (!level) return undefined;
+  const summary = readString(record, ["summary", "rationale", "reason"]);
+  return {
+    level,
+    score: score === undefined ? undefined : Math.min(5, Math.max(1, score)),
+    summary: summary ? redactAbsolutePaths(summary).slice(0, 500) : undefined,
+    recommendedPart: parseDevelopmentPart(
+      record.recommendedPart ?? record.recommended_part ?? record.recommendation,
+    ),
+  };
+}
+
+function parseDifficultyLevel(value: unknown): OfficeDifficultyAssessment["level"] | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["easy", "low", "simple", "쉬움", "낮음"].includes(normalized)) return "easy";
+  if (["normal", "medium", "moderate", "보통", "중간"].includes(normalized)) return "normal";
+  if (["hard", "high", "difficult", "어려움", "높음"].includes(normalized)) return "hard";
+  if (["critical", "very_high", "very-high", "complex", "매우 어려움", "최상"].includes(normalized)) return "critical";
+  return undefined;
+}
+
+function difficultyLevelFromScore(score: number): OfficeDifficultyAssessment["level"] {
+  if (score <= 2) return "easy";
+  if (score <= 3) return "normal";
+  if (score <= 4) return "hard";
+  return "critical";
+}
+
+function parseDevelopmentPart(value: unknown): OfficeDevelopmentPart | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replaceAll("_", "-");
+  if (["claude", "part-1", "development-1", "개발1", "개발-1"].includes(normalized)) return "claude";
+  if (["opencode", "open-code", "part-2", "development-2", "개발2", "개발-2"].includes(normalized)) return "opencode";
+  const parsed = developmentPartSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function normalizeIntakeBrief(value: unknown): OrbitIntakeBrief | undefined {
