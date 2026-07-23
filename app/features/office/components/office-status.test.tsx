@@ -3,13 +3,14 @@ import test from "node:test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { OfficeAgent, OfficeCapabilities, OfficeEngineInfo, OfficeJob, OfficeTask } from "../types";
+import type { OfficeAgent, OfficeCapabilities, OfficeEngineInfo, OfficeJob, OfficeResultPreview, OfficeTask } from "../types";
 import { pruneOfficeTasks, restoreOfficeTasks } from "../workflow-task-history";
 import { AgentDesk, getAgentStateLabel } from "./agent-desk";
 import { OfficeHeader } from "./office-header";
 import { formatExecutionSummary, ResultEngineCard } from "./result-engine-card";
 import { getPocTruthLabel } from "./task-composer";
 import { TaskQueueHistory } from "./task-queue-history";
+import { ResultVault } from "./result-vault";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
 import {
@@ -151,7 +152,27 @@ test("server queue exposes approval work and safe failure details", () => {
   assert.match(markup, /첫 번째 작업을 분석해줘/u);
   assert.match(markup, /1\/6 · 코드-X 작업 중/u);
   assert.match(markup, /모델 응답 형식을 확인하지 못했습니다/u);
+  assert.match(markup, /task-queue-history__scroll/u);
   assert.equal(getAgentStateLabel("error"), "문제 발생");
+});
+
+test("result archive renders every result as a separate selectable row", () => {
+  const results: OfficeResultPreview[] = Array.from({ length: 6 }, (_, index) => ({
+    jobId: `job-${index}`,
+    runId: `run-${index}`,
+    title: `보관 결과 ${index + 1}`,
+    summary: `요약 ${index + 1}`,
+    createdAt: `2026-07-2${index + 1}T00:00:00.000Z`,
+  }));
+  const markup = renderToStaticMarkup(
+    <ResultVault results={results} isReceiving={false} onOpen={() => undefined} />,
+  );
+
+  assert.match(markup, /aria-label="보관된 분석 결과"/u);
+  assert.match(markup, /보관 결과 1/u);
+  assert.match(markup, /보관 결과 6/u);
+  assert.equal((markup.match(/<li>/gu) ?? []).length, 6);
+  assert.doesNotMatch(markup, /--stack-index/u);
 });
 
 test("coding approval is visible only at the explicit human gate", () => {

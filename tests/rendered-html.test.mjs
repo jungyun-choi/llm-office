@@ -40,21 +40,22 @@ test("uses a trusted public origin even when proxy headers are hostile", async (
   );
 });
 
-test("server-renders the AI Office floor", async () => {
+test("server-renders the Louvre Forge floor", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /<html lang="ko">/i);
-  assert.match(html, /<title>AI Office \| 팀이 움직이는 디지털 사무실<\/title>/i);
-  assert.match(html, /AI 개발 오피스/);
+  assert.match(html, /<title>Louvre Forge \| 온라인 개발 오피스<\/title>/i);
+  assert.match(html, /Louvre 온라인 개발 오피스/);
   assert.match(html, /실시간 오피스/);
   assert.match(html, /구현 승인 · Git 승인 · PR 최종 검토/);
   assert.match(html, /오비트에게 요청/);
-  assert.match(html, /OpenCode 분석실/);
-  assert.match(html, /사용자 검토실/);
-  assert.match(html, /Claude 개발실/);
+  assert.match(html, /분석팀/);
+  assert.match(html, /검토팀/);
+  assert.match(html, /개발팀/);
+  assert.doesNotMatch(html, /합성 POC 전용입니다/u);
   assert.match(html, /DLD · 위키/);
   assert.match(html, /코드 · 프레임워크/);
   assert.match(html, /TopView · 영향\/견적/);

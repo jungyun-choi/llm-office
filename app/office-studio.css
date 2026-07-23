@@ -1137,6 +1137,19 @@
   box-shadow: none;
 }
 
+.task-queue-history__scroll {
+  max-height: 390px;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.task-queue-history__scroll:focus-visible {
+  outline: 2px solid rgb(25 127 116 / 35%);
+  outline-offset: 4px;
+}
+
 .office-campus__operations .task-queue-history__item-body {
   border: 0;
   border-bottom: 1px solid #ddd7cd;
@@ -1154,8 +1167,33 @@
 }
 
 .office-campus__operations .result-vault {
+  max-height: 458px;
   border-radius: 6px 6px 3px 3px;
   box-shadow: 0 5px 0 #061721, 0 12px 24px rgb(11 34 50 / 12%);
+}
+
+.office-campus__operations .result-stack {
+  display: grid;
+  gap: 8px;
+  max-height: 370px;
+  min-height: 0;
+  padding: 12px 4px 2px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.office-campus__operations .result-stack li {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  opacity: 1;
+  transform: none;
+}
+
+.office-campus__operations .result-stack button {
+  min-height: 76px;
+  box-shadow: 0 2px 7px rgb(0 0 0 / 14%);
 }
 
 @keyframes studio-status-blink {

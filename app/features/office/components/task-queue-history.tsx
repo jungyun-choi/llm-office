@@ -50,16 +50,18 @@ export function TaskQueueHistory(props: TaskQueueHistoryProps) {
         <div><span>SERVER WORK QUEUE</span><strong id="task-queue-title">업무 대기열 · 히스토리</strong></div>
         <small>{queuedCount}건 대기</small>
       </header>
-      {props.jobs.length === 0 && <p className="task-queue-history__empty">맡긴 업무가 서버 대기열에 순서대로 쌓입니다.</p>}
-      <JobList {...props} label="진행 중인 업무" jobs={activeJobs} />
-      {historyJobs.length > 0 && (
-        <>
-          <div className="task-queue-history__section-heading">
-            <span className="task-queue-history__section-label">최근 히스토리</span>
-          </div>
-          <JobList {...props} label="최근 히스토리" jobs={historyJobs} />
-        </>
-      )}
+      <div className="task-queue-history__scroll" tabIndex={0} aria-label="업무 대기열과 최근 히스토리">
+        {props.jobs.length === 0 && <p className="task-queue-history__empty">맡긴 업무가 서버 대기열에 순서대로 쌓입니다.</p>}
+        <JobList {...props} label="진행 중인 업무" jobs={activeJobs} />
+        {historyJobs.length > 0 && (
+          <>
+            <div className="task-queue-history__section-heading">
+              <span className="task-queue-history__section-label">최근 히스토리</span>
+            </div>
+            <JobList {...props} label="최근 히스토리" jobs={historyJobs} />
+          </>
+        )}
+      </div>
     </section>
   );
 }

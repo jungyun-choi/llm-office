@@ -28,7 +28,7 @@ export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
         <span className="campus-office__icon"><Bot size={18} aria-hidden="true" /></span>
         <div>
           <small>TEAM C · DEVELOPMENT</small>
-          <h2 id="claude-office-title">Claude 개발실</h2>
+          <h2 id="claude-office-title">개발팀</h2>
           <p>{job?.coding?.model ?? runtimeLabel ?? "승인된 사내 Claude 실행기"}</p>
         </div>
         <span className="campus-office__state">{getClaudeOfficeState(job)}</span>

@@ -229,7 +229,7 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
           rows={2}
           placeholder={OFFICE_COPY.composer.placeholder}
           aria-invalid={Boolean(errorMessage)}
-          aria-describedby={errorMessage ? "office-request-error" : "office-request-hint"}
+          aria-describedby={errorMessage ? "office-request-error" : undefined}
           onKeyDown={handleComposerKeyDown}
           {...form.register("request")}
         />
@@ -249,11 +249,7 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
         <p className="task-composer__error" id="office-request-error" role="alert">
           {errorMessage}
         </p>
-      ) : (
-        <p className="task-composer__hint" id="office-request-hint">
-          {OFFICE_COPY.composer.hint}
-        </p>
-      )}
+      ) : null}
     </form>
   );
 }

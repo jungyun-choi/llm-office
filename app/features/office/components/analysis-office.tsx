@@ -30,12 +30,12 @@ export function AnalysisOffice({ job, runtimeLabel }: AnalysisOfficeProps) {
         <span className="campus-office__icon"><BrainCircuit size={18} aria-hidden="true" /></span>
         <div>
           <small>TEAM A · ANALYSIS</small>
-          <h2 id="analysis-office-title">OpenCode 분석실</h2>
+          <h2 id="analysis-office-title">분석팀</h2>
           <p>{runtimeLabel ?? "사내 OpenCode 분석 실행기"}</p>
         </div>
         <OfficeStateBadge state={getAnalysisOfficeState(job)} />
       </header>
-      <ul className="analysis-agent-grid" aria-label="OpenCode 분석 에이전트 좌석">
+      <ul className="analysis-agent-grid" aria-label="Louvre 분석팀 에이전트 좌석">
         {OFFICE_AGENTS.map((agent) => {
           const state = getAnalysisAgentState(agent.id, job);
           const stage = job ? getStage(agent.id, job) : undefined;

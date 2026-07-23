@@ -19,21 +19,21 @@ const TEAM_DEFINITIONS = [
   {
     id: "analysis",
     eyebrow: "TEAM A · OPENCODE",
-    title: "OpenCode 분석실",
+    title: "분석팀",
     description: "DLD · 코드 · TopView 근거 조사",
     icon: BrainCircuit,
   },
   {
     id: "review",
     eyebrow: "TEAM B · HUMAN",
-    title: "사용자 검토실",
+    title: "검토팀",
     description: "구현 승인 · Git 승인 · PR 최종 검토",
     icon: UserRoundCheck,
   },
   {
     id: "development",
     eyebrow: "TEAM C · CLAUDE",
-    title: "Claude 개발실",
+    title: "개발팀",
     description: "코드 수정 · 테스트 · Git 게시",
     icon: Code2,
   },
@@ -63,7 +63,7 @@ export function CompanyOperationsBoard(props: CompanyOperationsBoardProps) {
     <section className="company-operations" aria-labelledby="company-operations-title">
       <header className="company-operations__header">
         <div>
-          <span>LIVE COMPANY</span>
+          <span>LOUVRE FORGE · LIVE TEAMS</span>
           <h2 id="company-operations-title">실시간 오피스</h2>
         </div>
         <p>분석 · 검토 · 개발</p>

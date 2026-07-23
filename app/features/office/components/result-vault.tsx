@@ -1,5 +1,4 @@
 import { FileArchive, FileText, Inbox } from "lucide-react";
-import type { CSSProperties } from "react";
 
 import { OFFICE_COPY } from "../copy";
 import type { OfficeResultPreview } from "../types";
@@ -28,9 +27,9 @@ export function ResultVault({ results, isReceiving, onOpen }: ResultVaultProps) 
           <p>{OFFICE_COPY.vault.emptyDescription}</p>
         </div>
       ) : (
-        <ul className="result-stack">
-          {results.slice(0, 3).map((result, index) => (
-            <li key={`${result.jobId}:${result.runId}`} style={{ "--stack-index": index } as CSSProperties}>
+        <ul className="result-stack" aria-label="보관된 분석 결과">
+          {results.map((result, index) => (
+            <li key={`${result.jobId}:${result.runId}`}>
               <button type="button" onClick={() => onOpen(result)}>
                 <span className="result-stack__file" aria-hidden="true"><FileText size={15} /></span>
                 <span>
