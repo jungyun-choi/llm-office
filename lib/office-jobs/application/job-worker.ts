@@ -147,6 +147,26 @@ export class JobWorker {
         return;
       }
       if (signal.aborted) throw new Error("worker stopped");
+      if (coding.kind === "awaiting_human_input") {
+        const createdAt = new Date().toISOString();
+        current = this.repository.update(current.id, current.version, {
+          state: "awaiting_development_input",
+          queueOrder: undefined,
+          updatedAt: createdAt,
+          worktreePath: coding.worktreePath ?? current.worktreePath,
+          branchName: coding.branchName ?? current.branchName,
+          claudeModel: coding.model ?? current.claudeModel,
+          claudeOutput: coding.output ?? current.claudeOutput,
+          developmentQuestion: {
+            ...coding.question,
+            id: crypto.randomUUID(),
+            status: "open",
+            createdAt,
+          },
+        });
+        this.event(current, "state", "아틀라스가 개발 중 사람의 판단이 필요한 질문을 보냈습니다.");
+        return;
+      }
       current = this.repository.update(current.id, current.version, {
         state: "testing",
         updatedAt: new Date().toISOString(),

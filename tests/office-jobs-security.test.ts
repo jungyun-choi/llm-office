@@ -233,6 +233,51 @@ test("coding approval carries the Atlas meeting brief into the Claude prompt", a
   repository.close();
 });
 
+test("development question persists human context and resumes the same worktree", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const config = syntheticConfig();
+  const service = new JobService(repository, inertExecutor(), config);
+  const job = baseJob("개발 중 버퍼 경계를 확인해 주세요");
+  const questionId = crypto.randomUUID();
+  job.state = "awaiting_development_input";
+  job.worktreePath = "/tmp/ai-office-test-worktrees/question-job";
+  job.branchName = `ai-office/${job.id}`;
+  job.developmentQuestion = {
+    id: questionId,
+    raisedBy: "implementation",
+    title: "호환성 범위 확인",
+    question: "기존 공개 인터페이스를 유지해야 하나요?",
+    context: "DLD와 현재 코드의 기본값이 다릅니다.",
+    evidence: ["DLD는 1MB, 현재 코드는 2MB"],
+    attempted: ["TopView와 최근 Git 이력 확인"],
+    resumeStage: "implementation",
+    status: "open",
+    createdAt: new Date().toISOString(),
+  };
+  repository.create(job);
+
+  const before = service.get(job.id);
+  assert.equal(before.actions.answerDevelopmentQuestion, true);
+  assert.equal(before.developmentQuestion?.raisedBy, "implementation");
+
+  const result = await service.act(job.id, {
+    action: "answer_development_question",
+    expectedVersion: job.version,
+    questionId,
+    feedback: "공개 인터페이스는 유지하고 내부 큐 깊이만 변경해 주세요.",
+  }, "development-question-answer");
+
+  assert.equal(result.job.state, "coding_queued");
+  const stored = repository.get(job.id);
+  assert.equal(stored?.worktreePath, job.worktreePath);
+  assert.equal(stored?.branchName, job.branchName);
+  assert.equal(stored?.developmentQuestion?.status, "answered");
+  assert.match(stored?.developmentQuestion?.answer ?? "", /공개 인터페이스/u);
+  assert.match(stored?.reviewFeedback ?? "", /개발 중 사람 판단/u);
+  assert.match(stored?.reviewFeedback ?? "", /내부 큐 깊이/u);
+  repository.close();
+});
+
 test("final merge approval completes only after the pull request gateway succeeds", async () => {
   const repository = new SqliteJobRepository(":memory:");
   const executor = inertExecutor();

@@ -293,6 +293,40 @@ test("Claude stations map coding, testing, and Git approval states", () => {
   assert.equal(getDevelopmentExchange(publishing).to, "릴레이");
 });
 
+test("development blockers move through the Atlas human meeting gate", () => {
+  const job: OfficeJob = {
+    ...createJob("job-human-question", "버퍼 호환성 확인", "awaiting_development_input"),
+    developmentQuestion: {
+      id: "11111111-1111-4111-8111-111111111111",
+      raisedBy: "implementation",
+      title: "호환성 범위 확인",
+      question: "기존 공개 인터페이스를 유지해야 하나요?",
+      context: "DLD와 현재 코드의 기본값이 다릅니다.",
+      evidence: ["DLD 기본값 1MB"],
+      attempted: ["TopView 확인"],
+      resumeStage: "implementation",
+      status: "open",
+      createdAt: "2026-07-23T01:00:00.000Z",
+    },
+    actions: { ...EMPTY_ACTIONS, answerDevelopmentQuestion: true },
+  };
+
+  const desk = renderReviewDesk(job);
+  const office = renderToStaticMarkup(<ClaudeOffice job={job} runtimeLabel="company" />);
+  assert.match(desk, /아틀라스 질문 확인/u);
+  assert.match(desk, /개발팀이 판단을 기다리고 있습니다/u);
+  assert.match(office, /사람 판단 대기/u);
+  assert.equal(getDevelopmentStationState("claude", job), "waiting");
+  assert.equal(getDevelopmentStationState("implementation", job), "waiting");
+  assert.equal(getDevelopmentStationState("verification", job), "idle");
+  assert.deepEqual(getDevelopmentExchange(job), {
+    from: "아틀라스",
+    to: "검토팀",
+    message: "메이슨의 보고를 검토했습니다. 추측으로 진행하지 않고 사람의 판단을 기다립니다.",
+    tone: "blocked",
+  });
+});
+
 test("analysis failures never look like Claude code failures", () => {
   const failed: OfficeJob = {
     ...createJob("job-analysis-failed", "TopView 분석", "failed"),
@@ -489,6 +523,7 @@ const EMPTY_ACTIONS: OfficeJob["actions"] = {
   publishAndPush: false,
   requestChanges: false,
   mergePr: false,
+  answerDevelopmentQuestion: false,
 };
 
 const CAPABILITIES: OfficeCapabilities = {

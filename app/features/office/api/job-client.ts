@@ -68,6 +68,9 @@ export async function runOfficeJobAction(
   feedback: string | undefined,
   signal: AbortSignal,
 ): Promise<OfficeJob> {
+  if (action === "answer_development_question" && !job.developmentQuestion?.id) {
+    throw new JobClientError("QUESTION_NOT_AVAILABLE", "답변할 개발팀 질문을 찾지 못했습니다.");
+  }
   const artifactDigest = action === "approve_coding"
     ? job.codingPacketDigest
     : action === "publish_changes" || action === "merge_pr"
@@ -79,6 +82,9 @@ export async function runOfficeJobAction(
     ...(feedback ? { feedback } : {}),
     ...(job.version === undefined ? {} : { expectedVersion: job.version }),
     ...(artifactDigest ? { artifactDigest } : {}),
+    ...(action === "answer_development_question"
+      ? { questionId: job.developmentQuestion?.id }
+      : {}),
   };
   const payload = await requestJson(`${JOBS_API_BASE}/${encodeURIComponent(job.id)}/actions`, {
     method: "POST",

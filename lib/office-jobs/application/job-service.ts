@@ -164,6 +164,8 @@ export class JobService {
       patch = this.queuePublishing(current, input.artifactDigest, input.mode);
     } else if (input.action === "request_changes") {
       patch = await this.requestChanges(current, input.feedback);
+    } else if (input.action === "answer_development_question") {
+      patch = this.answerDevelopmentQuestion(current, input.questionId, input.feedback);
     } else if (input.action === "cancel") patch = this.cancel(current);
     else patch = this.retry(current);
 
@@ -307,6 +309,7 @@ export class JobService {
         issueError: record.issueError,
       },
       error: record.error,
+      developmentQuestion: record.developmentQuestion,
       actions: this.availableActions(record, record.queueOrder !== undefined),
       events: this.repository.listEvents(record.id, 50),
     };
@@ -347,12 +350,13 @@ export class JobService {
         issueError: record.issueError,
       },
       error: record.error,
+      developmentQuestion: record.developmentQuestion,
       actions: this.availableActions(record, record.queuePosition !== undefined),
     };
   }
 
   private availableActions(
-    record: Pick<JobRecord, "state" | "testStatus" | "diffTruncated" | "error" | "pullRequestUrl" | "pullRequestNumber" | "changesDigest">,
+    record: Pick<JobRecord, "state" | "testStatus" | "diffTruncated" | "error" | "pullRequestUrl" | "pullRequestNumber" | "changesDigest" | "developmentQuestion">,
     queuedForExecution: boolean,
   ): JobDto["actions"] {
     const testPassed = record.testStatus === "passed";
@@ -370,6 +374,8 @@ export class JobService {
       mergePr: record.state === "review_pending" && Boolean(
         record.pullRequestUrl && record.pullRequestNumber && record.changesDigest && this.config.githubToken,
       ),
+      answerDevelopmentQuestion: record.state === "awaiting_development_input" &&
+        record.developmentQuestion?.status === "open" && this.config.codingEnabled,
     };
   }
 
@@ -480,6 +486,52 @@ export class JobService {
       issueUrl: undefined,
       issueError: undefined,
       updatedAt: new Date().toISOString(),
+      error: undefined,
+      cancelRequested: false,
+    };
+  }
+
+  private answerDevelopmentQuestion(
+    current: JobRecord,
+    questionId: string,
+    feedback: string,
+  ): Partial<JobRecord> {
+    const question = current.developmentQuestion;
+    if (
+      current.state !== "awaiting_development_input" ||
+      !question ||
+      question.status !== "open" ||
+      question.id !== questionId
+    ) {
+      throw invalidAction("현재 개발팀이 기다리는 질문에만 답변할 수 있습니다.");
+    }
+    if (!this.config.codingEnabled) {
+      throw new JobError(
+        "CODING_DISABLED",
+        this.config.configurationError ?? "Claude 코딩 기능이 비활성화되어 있습니다.",
+        503,
+        false,
+      );
+    }
+    const answer = feedback.trim();
+    const answeredAt = new Date().toISOString();
+    const decisionContext = [
+      current.reviewFeedback,
+      "[개발 중 사람 판단]",
+      `질문: ${question.question}`,
+      `답변: ${answer}`,
+    ].filter(Boolean).join("\n");
+    return {
+      state: "coding_queued",
+      queueOrder: this.repository.nextQueueOrder(),
+      updatedAt: answeredAt,
+      reviewFeedback: decisionContext,
+      developmentQuestion: {
+        ...question,
+        status: "answered",
+        answer,
+        answeredAt,
+      },
       error: undefined,
       cancelRequested: false,
     };
@@ -669,6 +721,7 @@ function actionMessage(action: JobActionInput["action"]): string {
   if (action === "approve_coding") return "사용자가 Claude 코딩을 승인했습니다.";
   if (action === "publish_changes") return "사용자가 변경 게시를 승인했습니다.";
   if (action === "request_changes") return "사용자가 PR 리뷰 피드백과 함께 재개발을 요청했습니다.";
+  if (action === "answer_development_question") return "사용자가 개발팀 질문에 답변해 작업을 재개했습니다.";
   if (action === "merge_pr") return "사용자가 PR 최종 머지를 승인했습니다.";
   if (action === "cancel") return "사용자가 업무 취소를 요청했습니다.";
   return "사용자가 업무 재시도를 요청했습니다.";

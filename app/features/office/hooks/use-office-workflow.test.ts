@@ -140,6 +140,7 @@ function createJob(
       publishAndPush: false,
       requestChanges: false,
       mergePr: false,
+      answerDevelopmentQuestion: false,
     },
     version,
   };

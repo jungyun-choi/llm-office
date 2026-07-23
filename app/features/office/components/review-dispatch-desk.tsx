@@ -17,6 +17,7 @@ import {
 import { getJobAnalysisResult } from "../job-analysis";
 import type { OfficeCapabilities, OfficeJob, OfficeJobAction, OfficeResult, PublishMode } from "../types";
 import { DevelopmentLeadMeeting } from "./development-lead-meeting";
+import { DevelopmentQuestionMeeting } from "./development-question-meeting";
 
 interface ReviewDispatchDeskProps {
   job: OfficeJob | null;
@@ -57,6 +58,14 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
           job={props.job as OfficeJob}
           busy={props.busy}
           onApprove={(feedback) => props.onAction(props.job as OfficeJob, "approve_coding", undefined, feedback)}
+        />
+      )}
+      {props.job?.state === "awaiting_development_input" && (
+        <DevelopmentQuestionMeeting
+          key={`${props.job.id}:${props.job.developmentQuestion?.id ?? props.job.version ?? 0}`}
+          job={props.job}
+          busy={props.busy}
+          onAnswer={(feedback) => props.onAction(props.job as OfficeJob, "answer_development_question", undefined, feedback)}
         />
       )}
       {canPublishCommit(props.job, props.capabilities) && (
@@ -226,6 +235,7 @@ function canPublishAndPush(job: OfficeJob | null, capabilities: OfficeCapabiliti
 function getReviewEyebrow(job: OfficeJob | null): string {
   if (!job) return "EMPTY DESK";
   if (job.state === "awaiting_coding_approval") return "PACKET READY";
+  if (job.state === "awaiting_development_input") return "ATLAS QUESTION";
   if (job.state === "changes_ready") return "CHANGES READY";
   if (job.state === "review_pending") return "FINAL REVIEW";
   if (job.state === "merging") return "MERGING PR";
@@ -236,6 +246,7 @@ function getReviewEyebrow(job: OfficeJob | null): string {
 function getReviewTitle(job: OfficeJob | null): string {
   if (!job) return "검토할 업무가 없습니다";
   if (job.state === "awaiting_coding_approval") return "구현 패킷이 도착했습니다";
+  if (job.state === "awaiting_development_input") return "개발팀이 판단을 기다리고 있습니다";
   if (job.state === "changes_ready") return "코드와 테스트 결과가 도착했습니다";
   if (job.state === "review_pending") return "PR 최종 검토가 필요합니다";
   if (job.state === "merging") return "승인된 PR을 머지하고 있습니다";
@@ -249,6 +260,7 @@ function getReviewDescription(job: OfficeJob | null): string {
   if (!job) return "오비트에게 업무를 맡기면 분석 패킷이 이곳에 도착합니다.";
   if (job.error) return job.error.message;
   if (job.state === "awaiting_coding_approval") return "분석 패킷을 확인하고 아틀라스 팀장과 구현 범위·완료 조건을 맞춘 뒤 승인하세요.";
+  if (job.state === "awaiting_development_input") return "아틀라스가 팀원의 막힘과 근거를 정리했습니다. 회의실에서 필요한 판단만 답하면 같은 업무가 이어집니다.";
   if (job.state === "changes_ready") return "변경 파일, Diff, 테스트 결과를 확인한 뒤 Git 반영 범위를 선택하세요.";
   if (job.state === "review_pending") return "PR 링크에서 구현과 리뷰 코멘트를 확인한 뒤 수정 요청 또는 최종 머지를 선택하세요.";
   if (job.state === "completed") return job.coding?.pullRequestUrl

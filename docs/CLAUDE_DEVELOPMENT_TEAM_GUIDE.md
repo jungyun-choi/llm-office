@@ -366,6 +366,74 @@ AI_OFFICE_CLAUDE_MAX_REWORK_ROUNDS=2
 한도를 넘거나 Opus가 `human_escalation`을 반환하면 Job을 무한 반복하지 않는다. UI에 문제
 발생 좌석, 마지막 blocker, Opus 판단을 표시하고 사람 입력을 기다린다.
 
+### 6.1 개발 중 사람 판단 게이트
+
+사람 질문은 일반 오류가 아니다. 메이슨·베라·릴레이가 blocker를 보고하면 아틀라스가 먼저
+저장소 근거와 팀 내 재지시로 해결한다. 다음처럼 사람만 결정할 수 있는 내용일 때만
+`human_escalation`을 만든다.
+
+- DLD/TopView/코드가 서로 달라 제품 의도를 선택해야 하는 경우
+- 공개 인터페이스나 호환성 범위를 사람이 확정해야 하는 경우
+- 데이터 손실·성능 회귀 등 알려진 위험을 감수할지 결정해야 하는 경우
+- 필요한 사내 자료나 재현 조건을 모델이 접근할 수 없는 경우
+
+체인 오브 쏘트는 저장하거나 노출하지 않는다. 질문에는 짧은 질문, 맥락, 확인 근거, 이미
+시도한 내용, 답변 뒤 재개할 역할만 담는다.
+
+```ts
+interface DevelopmentQuestionRequest {
+  raisedBy: "lead" | "implementation" | "verification" | "git";
+  title: string;
+  question: string;
+  context: string;
+  evidence: string[];
+  attempted: string[];
+  resumeStage: "implementation" | "verification" | "git";
+}
+```
+
+company executor는 해당 결과를 `runCoding()`의 다음 결과로 서버에 반환한다.
+
+```ts
+{
+  kind: "awaiting_human_input",
+  question: DevelopmentQuestionRequest,
+  worktreePath?: string,
+  branchName?: string,
+  model?: string,
+  output?: string
+}
+```
+
+서버는 ID와 시각을 직접 발급하고 Job을 `awaiting_development_input`으로 바꾼다. 이때 개발
+lane 실행 슬롯을 즉시 놓으므로 다른 개발 업무와 분석 업무는 계속 진행된다. 질문은 SQLite의
+`development_question_json`에 보관되어 서버를 재시작해도 사라지지 않는다.
+
+UI에서는 검토팀 대기열에 `개발팀 질문` 파일로 표시하고, 개발팀 좌석에는 일시 정지 상태와
+`아틀라스 -> 검토팀` handoff를 표시한다. 사용자는 아틀라스 회의실에서 근거를 읽고 답한다.
+
+```http
+POST /api/v1/jobs/:jobId/actions
+Idempotency-Key: <unique-key>
+Content-Type: application/json
+
+{
+  "action": "answer_development_question",
+  "expectedVersion": 18,
+  "questionId": "<server-issued-uuid>",
+  "feedback": "공개 인터페이스는 유지하고 내부 큐 깊이만 확장해 주세요."
+}
+```
+
+서버는 Job version, 열린 question ID, 현재 상태를 모두 검증한다. 성공하면 질문을 `answered`로
+남기고 사람 답변을 다음 아틀라스 지시 컨텍스트에 추가한 뒤 `coding_queued`로 복귀시킨다.
+company executor는 기존 `worktreePath`와 branch를 재사용하고 `resumeStage`부터 이어서 실행해야
+한다. 새 worktree를 만들어 기존 변경을 잃거나 처음부터 전체 팀을 다시 돌리면 안 된다.
+
+한 Job에는 열린 질문을 하나만 허용한다. 답변 대기 중 중복 질문을 만들지 않고, 같은
+Idempotency-Key의 답변 재전송은 같은 결과를 반환한다. 질문을 취소하면 기존 Job 취소 규칙을
+따른다.
+
 ## 7. 회사 런타임 권한 원칙
 
 `company`는 사내 모델과 사내 에이전트가 이미 격리된 회사 환경에서 실행된다. 합성 POC의

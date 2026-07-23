@@ -41,11 +41,11 @@ const TEAM_DEFINITIONS = [
 
 const TEAM_STATES: Record<CompanyTeamId, readonly OfficeJobState[]> = {
   analysis: ["queued", "analyzing"],
-  review: ["awaiting_coding_approval", "changes_ready", "review_pending", "merging"],
-  development: ["coding_queued", "coding", "testing", "publishing"],
+  review: ["awaiting_coding_approval", "awaiting_development_input", "changes_ready", "review_pending", "merging"],
+  development: ["coding_queued", "coding", "testing", "awaiting_development_input", "publishing"],
 };
 
-const HUMAN_WAITING_STATES = ["awaiting_coding_approval", "changes_ready", "review_pending"] as const;
+const HUMAN_WAITING_STATES = ["awaiting_coding_approval", "awaiting_development_input", "changes_ready", "review_pending"] as const;
 const BOTTLENECK_WAIT_MINUTES = 30;
 
 export interface HumanBottleneckSnapshot {
@@ -240,6 +240,7 @@ function useBoardClock(): number | undefined {
 
 function getHumanGateLabel(state: OfficeJobState): string {
   if (state === "awaiting_coding_approval") return "구현 승인";
+  if (state === "awaiting_development_input") return "개발팀 질문";
   if (state === "changes_ready") return "Git 승인";
   return "PR 최종 검토";
 }
@@ -270,6 +271,7 @@ function getTeamActivity(job: OfficeJob): string {
     return running?.summary ?? (agent ? `${agent.name}가 근거를 정리하는 중` : "전문 에이전트가 분석하는 중");
   }
   if (job.state === "awaiting_coding_approval") return "분석 패킷 확인과 구현 승인이 필요합니다";
+  if (job.state === "awaiting_development_input") return "아틀라스가 개발 중 판단을 요청했습니다";
   if (job.state === "changes_ready") return "변경 파일과 테스트 결과의 Git 승인이 필요합니다";
   if (job.state === "review_pending") return "GitHub PR 검토와 최종 결정이 필요합니다";
   if (job.state === "merging") return "승인된 PR의 머지 상태를 확인하는 중";

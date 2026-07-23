@@ -164,6 +164,7 @@ function getClaudeCurrentTask(job: OfficeJob): string {
   if (job.state === "coding_queued") return "격리 작업 브랜치 준비 대기";
   if (job.state === "coding") return "허용된 경로에서 코드 구현";
   if (job.state === "testing") return "변경 코드 회귀 테스트";
+  if (job.state === "awaiting_development_input") return "사람 판단을 기다리며 안전하게 일시 정지";
   if (job.state === "changes_ready") return "변경 파일과 테스트 결과 전달";
   if (job.state === "publishing") return "승인된 변경의 Commit · Push";
   if (job.state === "review_pending") return "GitHub PR 최종 리뷰 대기";
@@ -189,6 +190,11 @@ export function getImplementationPlanIndex(job: OfficeJob): number {
   if (["awaiting_coding_approval", "coding_queued"].includes(job.state)) return 0;
   if (job.state === "coding") return 1;
   if (job.state === "testing") return 3;
+  if (job.state === "awaiting_development_input") {
+    if (job.developmentQuestion?.resumeStage === "verification") return 3;
+    if (job.developmentQuestion?.resumeStage === "git") return 5;
+    return 1;
+  }
   if (job.state === "changes_ready") return 4;
   if (["publishing", "review_pending", "merging"].includes(job.state)) return 5;
   if (job.state === "failed") {
@@ -207,6 +213,7 @@ export function getDevelopmentStationState(
 ): DevelopmentFlowState {
   if (!job || job.state === "queued" || job.state === "analyzing" || job.state === "canceled") return "idle";
   if (job.state === "failed") return getFailedStationState(station, job);
+  if (job.state === "awaiting_development_input") return getHumanQuestionStationState(station, job);
   if (station === "claude") return getClaudeLeadState(job.state);
   if (station === "implementation") return getImplementationState(job.state);
   if (station === "verification") return getVerificationState(job.state);
@@ -243,6 +250,20 @@ function getPublisherState(state: OfficeJob["state"]): DevelopmentFlowState {
   return "idle";
 }
 
+function getHumanQuestionStationState(
+  station: DevelopmentStationId,
+  job: OfficeJob,
+): DevelopmentFlowState {
+  if (station === "claude") return "waiting";
+  const resumeStage = job.developmentQuestion?.resumeStage ?? "implementation";
+  if (resumeStage === "implementation") return station === "implementation" ? "waiting" : "idle";
+  if (resumeStage === "verification") {
+    if (station === "implementation") return "complete";
+    return station === "verification" ? "waiting" : "idle";
+  }
+  return station === "publisher" ? "waiting" : "complete";
+}
+
 function getFailedStationState(station: DevelopmentStationId, job: OfficeJob): DevelopmentFlowState {
   if (!job.coding) return "idle";
   if (station === "claude") return "error";
@@ -255,6 +276,7 @@ function getClaudeOfficeState(job: OfficeJob | null): string {
   if (!job || ["queued", "analyzing"].includes(job.state)) return "업무 수령 대기";
   if (isPreDevelopmentFailure(job)) return "업무 수령 대기";
   if (job.state === "awaiting_coding_approval") return "사용자 승인 대기";
+  if (job.state === "awaiting_development_input") return "사람 판단 대기";
   if (job.state === "changes_ready") return "Git 승인 대기";
   if (job.state === "review_pending") return "PR 최종 검토 대기";
   if (job.state === "merging") return "PR 머지 중";
@@ -267,6 +289,7 @@ function getClaudeActivity(job: OfficeJob | null): string {
   if (!job) return "검토 데스크의 구현 승인을 기다립니다";
   if (isPreDevelopmentFailure(job)) return "분석팀이 문제를 해결한 뒤 구현 패킷을 전달합니다";
   if (job.state === "awaiting_coding_approval") return "구현 패킷은 도착했지만 아직 코드를 건드리지 않습니다";
+  if (job.state === "awaiting_development_input") return "팀원의 막힘을 정리해 회의실에서 사람의 판단을 기다립니다";
   if (job.state === "changes_ready") return "변경과 테스트를 마치고 Git 승인을 기다립니다";
   if (job.state === "review_pending") return "PR이 준비되어 사용자의 최종 코드 검토를 기다립니다";
   if (job.state === "merging") return "사용자의 최종 승인에 따라 PR을 머지하고 있습니다";
@@ -347,6 +370,15 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
       tone: "active",
     };
   }
+  if (job.state === "awaiting_development_input") {
+    const reporter = getDevelopmentReporterName(job);
+    return {
+      from: "아틀라스",
+      to: "검토팀",
+      message: `${reporter}의 보고를 검토했습니다. 추측으로 진행하지 않고 사람의 판단을 기다립니다.`,
+      tone: "blocked",
+    };
+  }
   if (job.state === "testing") {
     return {
       from: "메이슨",
@@ -406,4 +438,11 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
     message: "현재 업무 상태를 확인하고 있습니다.",
     tone: "idle",
   };
+}
+
+function getDevelopmentReporterName(job: OfficeJob): string {
+  if (job.developmentQuestion?.raisedBy === "implementation") return "메이슨";
+  if (job.developmentQuestion?.raisedBy === "verification") return "베라";
+  if (job.developmentQuestion?.raisedBy === "git") return "릴레이";
+  return "아틀라스";
 }

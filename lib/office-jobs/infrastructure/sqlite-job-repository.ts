@@ -21,6 +21,7 @@ const ACTIVE_STATES = [
   "coding_queued",
   "coding",
   "testing",
+  "awaiting_development_input",
   "changes_ready",
   "publishing",
   "review_pending",
@@ -116,10 +117,10 @@ export class SqliteJobRepository implements JobRepository {
         claude_output, changed_files_json, diff_text, diff_truncated,
         changes_digest, changes_manifest_json, test_status, test_output, test_output_truncated,
         requested_publish_mode, commit_sha, pull_request_url, pull_request_number,
-        pull_request_error, review_feedback, review_round, issue_url, issue_error,
+        pull_request_error, review_feedback, development_question_json, review_round, issue_url, issue_error,
         error_json, cancel_requested, attempts
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(...jobValues(record));
     return record;
@@ -173,6 +174,7 @@ export class SqliteJobRepository implements JobRepository {
           pull_request_url,
           pull_request_number,
           pull_request_error,
+          development_question_json,
           review_round,
           issue_url,
           issue_error,
@@ -272,7 +274,7 @@ export class SqliteJobRepository implements JobRepository {
           claude_output = ?, changed_files_json = ?, diff_text = ?, diff_truncated = ?,
           changes_digest = ?, changes_manifest_json = ?, test_status = ?, test_output = ?, test_output_truncated = ?,
           requested_publish_mode = ?, commit_sha = ?, pull_request_url = ?, pull_request_number = ?,
-          pull_request_error = ?, review_feedback = ?, review_round = ?, issue_url = ?, issue_error = ?,
+          pull_request_error = ?, review_feedback = ?, development_question_json = ?, review_round = ?, issue_url = ?, issue_error = ?,
           error_json = ?, cancel_requested = ?, attempts = ?
         WHERE id = ? AND version = ?
     `).run(...jobValues(next).slice(1), id, expectedVersion);
@@ -361,6 +363,7 @@ export class SqliteJobRepository implements JobRepository {
         pull_request_number INTEGER,
         pull_request_error TEXT,
         review_feedback TEXT,
+        development_question_json TEXT,
         review_round INTEGER NOT NULL DEFAULT 0,
         issue_url TEXT,
         issue_error TEXT,
@@ -405,6 +408,7 @@ export class SqliteJobRepository implements JobRepository {
     this.ensureColumn("pull_request_number", "ALTER TABLE office_jobs ADD COLUMN pull_request_number INTEGER");
     this.ensureColumn("pull_request_error", "ALTER TABLE office_jobs ADD COLUMN pull_request_error TEXT");
     this.ensureColumn("review_feedback", "ALTER TABLE office_jobs ADD COLUMN review_feedback TEXT");
+    this.ensureColumn("development_question_json", "ALTER TABLE office_jobs ADD COLUMN development_question_json TEXT");
     this.ensureColumn("review_round", "ALTER TABLE office_jobs ADD COLUMN review_round INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("issue_url", "ALTER TABLE office_jobs ADD COLUMN issue_url TEXT");
     this.ensureColumn("issue_error", "ALTER TABLE office_jobs ADD COLUMN issue_error TEXT");
@@ -463,6 +467,7 @@ function jobValues(record: JobRecord): SqlValue[] {
     record.pullRequestNumber ?? null,
     record.pullRequestError ?? null,
     record.reviewFeedback ?? null,
+    jsonValue(record.developmentQuestion),
     record.reviewRound,
     record.issueUrl ?? null,
     record.issueError ?? null,
@@ -507,6 +512,7 @@ function rowToJob(row: DatabaseRow): JobRecord {
     pullRequestNumber: optionalNumber(row.pull_request_number),
     pullRequestError: optionalString(row.pull_request_error),
     reviewFeedback: optionalString(row.review_feedback),
+    developmentQuestion: parseJson(row.development_question_json),
     reviewRound: numberValue(row.review_round),
     issueUrl: optionalString(row.issue_url),
     issueError: optionalString(row.issue_error),
@@ -555,6 +561,7 @@ function rowToListJob(row: DatabaseRow): JobListRecord {
     pullRequestUrl: optionalString(row.pull_request_url),
     pullRequestNumber: optionalNumber(row.pull_request_number),
     pullRequestError: optionalString(row.pull_request_error),
+    developmentQuestion: parseJson(row.development_question_json),
     reviewRound: numberValue(row.review_round),
     issueUrl: optionalString(row.issue_url),
     issueError: optionalString(row.issue_error),

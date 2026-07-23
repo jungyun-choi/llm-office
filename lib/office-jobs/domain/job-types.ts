@@ -7,6 +7,7 @@ export const JOB_STATES = [
   "coding_queued",
   "coding",
   "testing",
+  "awaiting_development_input",
   "changes_ready",
   "publishing",
   "review_pending",
@@ -23,6 +24,26 @@ export type PublishMode = "commit" | "commit_and_push";
 export type TestStatus = "not_run" | "passed" | "failed";
 export type AnalysisStageId = "orchestrator" | "research" | "framework" | "estimate" | "test" | "git";
 export type AnalysisStageStatus = "pending" | "running" | "completed" | "failed";
+export type DevelopmentRole = "lead" | "implementation" | "verification" | "git";
+export type DevelopmentResumeStage = "implementation" | "verification" | "git";
+
+export interface DevelopmentQuestionRequest {
+  raisedBy: DevelopmentRole;
+  title: string;
+  question: string;
+  context: string;
+  evidence: string[];
+  attempted: string[];
+  resumeStage: DevelopmentResumeStage;
+}
+
+export interface DevelopmentQuestion extends DevelopmentQuestionRequest {
+  id: string;
+  status: "open" | "answered";
+  createdAt: string;
+  answer?: string;
+  answeredAt?: string;
+}
 
 export interface AnalysisStage {
   id: AnalysisStageId;
@@ -127,6 +148,7 @@ export interface JobRecord {
   pullRequestNumber?: number;
   pullRequestError?: string;
   reviewFeedback?: string;
+  developmentQuestion?: DevelopmentQuestion;
   reviewRound: number;
   issueUrl?: string;
   issueError?: string;
@@ -178,6 +200,7 @@ export interface JobListRecord {
   pullRequestUrl?: string;
   pullRequestNumber?: number;
   pullRequestError?: string;
+  developmentQuestion?: DevelopmentQuestion;
   reviewRound: number;
   issueUrl?: string;
   issueError?: string;
@@ -233,6 +256,7 @@ export interface JobDto {
     issueError?: string;
   };
   error?: JobErrorSnapshot;
+  developmentQuestion?: DevelopmentQuestion;
   actions: {
     approveCoding: boolean;
     cancel: boolean;
@@ -241,6 +265,7 @@ export interface JobDto {
     publishAndPush: boolean;
     requestChanges: boolean;
     mergePr: boolean;
+    answerDevelopmentQuestion: boolean;
   };
   events: JobEvent[];
 }
@@ -279,6 +304,7 @@ export interface JobListItemDto {
     issueError?: string;
   };
   error?: JobErrorSnapshot;
+  developmentQuestion?: DevelopmentQuestion;
   actions: JobDto["actions"];
 }
 

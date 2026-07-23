@@ -27,6 +27,7 @@ export type OfficeJobState =
   | "coding_queued"
   | "coding"
   | "testing"
+  | "awaiting_development_input"
   | "changes_ready"
   | "publishing"
   | "review_pending"
@@ -39,6 +40,7 @@ export type OfficeJobAction =
   | "approve_coding"
   | "publish_changes"
   | "request_changes"
+  | "answer_development_question"
   | "merge_pr"
   | "cancel"
   | "retry";
@@ -46,6 +48,23 @@ export type PublishMode = "commit" | "commit_and_push";
 export type OfficeConnectionMode = "checking" | "server" | "disconnected";
 export type DevelopmentStationId = "claude" | "implementation" | "verification" | "publisher";
 export type DevelopmentFlowState = "idle" | "queued" | "working" | "waiting" | "complete" | "error";
+export type DevelopmentRole = "lead" | "implementation" | "verification" | "git";
+export type DevelopmentResumeStage = "implementation" | "verification" | "git";
+
+export interface OfficeDevelopmentQuestion {
+  id: string;
+  raisedBy: DevelopmentRole;
+  title: string;
+  question: string;
+  context: string;
+  evidence: readonly string[];
+  attempted: readonly string[];
+  resumeStage: DevelopmentResumeStage;
+  status: "open" | "answered";
+  createdAt: string;
+  answer?: string;
+  answeredAt?: string;
+}
 
 export interface OfficeAgent {
   id: AgentId;
@@ -206,6 +225,7 @@ export interface OfficeJobActions {
   publishAndPush: boolean;
   requestChanges: boolean;
   mergePr: boolean;
+  answerDevelopmentQuestion: boolean;
 }
 
 export interface OfficeJobError {
@@ -265,6 +285,7 @@ export interface OfficeJob {
   coding?: OfficeCodingResult;
   codingPlan?: OfficeCodingPlan;
   error?: OfficeJobError;
+  developmentQuestion?: OfficeDevelopmentQuestion;
   events: readonly OfficeJobEvent[];
   actions: OfficeJobActions;
   version?: number;

@@ -59,6 +59,7 @@ const BASE_JOB = {
     publishAndPush: false,
     requestChanges: false,
     mergePr: false,
+    answerDevelopmentQuestion: false,
   },
   events: [{ id: 1, kind: "state", state: "changes_ready", message: "검토 준비", createdAt: "2026-07-22T00:01:00.000Z" }],
 };
@@ -94,6 +95,31 @@ test("job display data redacts absolute worktree paths", () => {
   assert.equal(job.coding?.changedFiles[1]?.path, "…/simulator/tests/read-buffer.test.cc");
   assert.doesNotMatch(job.coding?.diff ?? "", /\/Users\/person/u);
   assert.match(job.coding?.diff ?? "", /\[workspace-path\]/u);
+});
+
+test("development questions are normalized for the Atlas meeting room", () => {
+  const job = parseJobPayload({
+    ...BASE_JOB,
+    state: "awaiting_development_input",
+    developmentQuestion: {
+      id: "11111111-1111-4111-8111-111111111111",
+      raisedBy: "verification",
+      title: "회귀 기준 확인",
+      question: "기존 타이밍 오차를 유지해야 하나요?",
+      context: "/Users/person/work/spec과 구현 결과가 다릅니다.",
+      evidence: ["/Users/person/work/spec/topview.md"],
+      attempted: ["DLD와 Git history 확인"],
+      resumeStage: "verification",
+      status: "open",
+      createdAt: "2026-07-23T01:00:00.000Z",
+    },
+    actions: { ...BASE_JOB.actions, answerDevelopmentQuestion: true },
+  });
+
+  assert.equal(job.state, "awaiting_development_input");
+  assert.equal(job.developmentQuestion?.raisedBy, "verification");
+  assert.match(job.developmentQuestion?.context ?? "", /\[workspace-path\]/u);
+  assert.equal(job.actions.answerDevelopmentQuestion, true);
 });
 
 test("list and capabilities accept the single-server response shape", () => {

@@ -2,12 +2,14 @@ import type { PocRunResult } from "../../poc/domain/poc-types";
 import type { AgentRuntimeProgressCallback } from "../../poc/application/ports/agent-runtime";
 import type {
   ChangeManifestEntry,
+  DevelopmentQuestionRequest,
   JobExecutionMode,
   JobRecord,
   PublishMode,
 } from "../domain/job-types";
 
-export interface CodingExecutionResult {
+export interface CompletedCodingExecutionResult {
+  kind?: "completed";
   worktreePath: string;
   branchName: string;
   model: string;
@@ -18,6 +20,17 @@ export interface CodingExecutionResult {
   changesDigest: string;
   changesManifest: ChangeManifestEntry[];
 }
+
+export interface WaitingCodingExecutionResult {
+  kind: "awaiting_human_input";
+  question: DevelopmentQuestionRequest;
+  worktreePath?: string;
+  branchName?: string;
+  model?: string;
+  output?: string;
+}
+
+export type CodingExecutionResult = CompletedCodingExecutionResult | WaitingCodingExecutionResult;
 
 export interface TestExecutionResult {
   passed: boolean;

@@ -36,6 +36,15 @@ const actionBase = z.object({
   expectedVersion: z.number().int().min(1),
 });
 
+const humanDecisionText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(4_000)
+  .refine((value) => !probableSecret.test(value), {
+    message: "답변에 비밀값으로 보이는 내용이 있습니다.",
+  });
+
 export const jobActionSchema = z.discriminatedUnion("action", [
   actionBase.extend({
     action: z.literal("approve_coding"),
@@ -49,7 +58,12 @@ export const jobActionSchema = z.discriminatedUnion("action", [
   }).strict(),
   actionBase.extend({
     action: z.literal("request_changes"),
-    feedback: z.string().trim().min(1).max(4_000),
+    feedback: humanDecisionText,
+  }).strict(),
+  actionBase.extend({
+    action: z.literal("answer_development_question"),
+    questionId: z.string().uuid(),
+    feedback: humanDecisionText,
   }).strict(),
   actionBase.extend({
     action: z.literal("merge_pr"),

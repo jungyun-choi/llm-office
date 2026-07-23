@@ -8,6 +8,7 @@ import type {
   OfficeCodingPlan,
   OfficeCodingResult,
   OfficeCodingTest,
+  OfficeDevelopmentQuestion,
   OfficeJob,
   OfficeJobActions,
   OfficeJobError,
@@ -24,6 +25,7 @@ const jobStateSchema = z.enum([
   "coding_queued",
   "coding",
   "testing",
+  "awaiting_development_input",
   "changes_ready",
   "publishing",
   "review_pending",
@@ -36,6 +38,9 @@ const testStatusSchema = z.enum(["not_run", "pending", "running", "passed", "fai
 const analysisStageStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
 const analysisStageIdSchema = z.enum(["orchestrator", "research", "framework", "estimate", "test", "git"]);
 const analysisStagePhaseSchema = z.enum(["preparing_context", "calling_model", "validating_output"]);
+const developmentRoleSchema = z.enum(["lead", "implementation", "verification", "git"]);
+const developmentResumeStageSchema = z.enum(["implementation", "verification", "git"]);
+const developmentQuestionStatusSchema = z.enum(["open", "answered"]);
 const MAX_DIFF_LENGTH = 60_000;
 const MAX_OUTPUT_LENGTH = 16_000;
 
@@ -106,6 +111,9 @@ function normalizeJob(
       : coding,
     codingPlan: normalizeCodingPlan(codingPacket),
     error: normalizeError(record.error),
+    developmentQuestion: normalizeDevelopmentQuestion(
+      record.developmentQuestion ?? record.development_question,
+    ),
     events: normalizeEvents(record.events),
     actions: normalizeActions(record.actions),
     version: readNumber(record, ["version"]),
@@ -231,6 +239,39 @@ function normalizeActions(value: unknown): OfficeJobActions {
     publishAndPush: record ? readBoolean(record, ["publishAndPush", "publish_and_push"], false) : false,
     requestChanges: record ? readBoolean(record, ["requestChanges", "request_changes"], false) : false,
     mergePr: record ? readBoolean(record, ["mergePr", "merge_pr"], false) : false,
+    answerDevelopmentQuestion: record
+      ? readBoolean(record, ["answerDevelopmentQuestion", "answer_development_question"], false)
+      : false,
+  };
+}
+
+function normalizeDevelopmentQuestion(value: unknown): OfficeDevelopmentQuestion | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const id = readString(record, ["id"]);
+  const raisedBy = developmentRoleSchema.safeParse(record.raisedBy ?? record.raised_by);
+  const resumeStage = developmentResumeStageSchema.safeParse(record.resumeStage ?? record.resume_stage);
+  const status = developmentQuestionStatusSchema.safeParse(record.status);
+  const title = readString(record, ["title"]);
+  const question = readString(record, ["question"]);
+  const context = readString(record, ["context"]);
+  const createdAt = readString(record, ["createdAt", "created_at"]);
+  if (!id || !raisedBy.success || !resumeStage.success || !status.success || !title || !question || !context || !createdAt) {
+    return undefined;
+  }
+  return {
+    id,
+    raisedBy: raisedBy.data,
+    title: redactAbsolutePaths(title).slice(0, 180),
+    question: redactAbsolutePaths(question).slice(0, 1_200),
+    context: redactAbsolutePaths(context).slice(0, 1_600),
+    evidence: normalizeBoundedStrings(record.evidence, 8, 500),
+    attempted: normalizeBoundedStrings(record.attempted, 8, 500),
+    resumeStage: resumeStage.data,
+    status: status.data,
+    createdAt,
+    answer: readString(record, ["answer"])?.slice(0, 4_000),
+    answeredAt: readString(record, ["answeredAt", "answered_at"]),
   };
 }
 

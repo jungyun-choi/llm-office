@@ -319,12 +319,20 @@ export function getJobPollingDelay(hasActiveJobs: boolean, consecutiveFailures: 
 }
 
 function isPollingState(state: OfficeJob["state"]): boolean {
-  return !["completed", "failed", "canceled", "awaiting_coding_approval", "changes_ready", "review_pending"].includes(state);
+  return ![
+    "completed",
+    "failed",
+    "canceled",
+    "awaiting_coding_approval",
+    "awaiting_development_input",
+    "changes_ready",
+    "review_pending",
+  ].includes(state);
 }
 
 function chooseFocusJob(jobs: readonly OfficeJob[]): OfficeJob | null {
   const priorities: readonly OfficeJob["state"][] = [
-    "review_pending", "awaiting_coding_approval", "changes_ready", "failed", "coding", "testing",
+    "awaiting_development_input", "review_pending", "awaiting_coding_approval", "changes_ready", "failed", "coding", "testing",
     "merging", "publishing", "analyzing", "coding_queued", "queued", "completed", "canceled",
   ];
   for (const state of priorities) {
