@@ -71,6 +71,9 @@ export async function runOfficeJobAction(
   if (action === "answer_development_question" && !job.developmentQuestion?.id) {
     throw new JobClientError("QUESTION_NOT_AVAILABLE", "답변할 개발팀 질문을 찾지 못했습니다.");
   }
+  if (action === "request_reanalysis" && !job.analysisRunId) {
+    throw new JobClientError("ANALYSIS_NOT_AVAILABLE", "추가 분석할 최신 결과를 찾지 못했습니다.");
+  }
   const artifactDigest = action === "approve_coding"
     ? job.codingPacketDigest
     : action === "publish_changes" || action === "merge_pr"
@@ -85,6 +88,7 @@ export async function runOfficeJobAction(
     ...(action === "answer_development_question"
       ? { questionId: job.developmentQuestion?.id }
       : {}),
+    ...(action === "request_reanalysis" ? { analysisRunId: job.analysisRunId } : {}),
   };
   const payload = await requestJson(`${JOBS_API_BASE}/${encodeURIComponent(job.id)}/actions`, {
     method: "POST",

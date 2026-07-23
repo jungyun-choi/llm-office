@@ -9,6 +9,7 @@ import { executeSecureCli } from "../lib/poc/infrastructure/secure-cli-process";
 import { JobService } from "../lib/office-jobs/application/job-service";
 import type { JobExecutionPort } from "../lib/office-jobs/application/job-execution.port";
 import type { JobRecord } from "../lib/office-jobs/domain/job-types";
+import { buildAnalysisRequest } from "../lib/office-jobs/domain/orbit-intake";
 import { LocalJobController } from "../lib/office-jobs/http/local-job-controller";
 import { getJobRuntimeConfig, type JobRuntimeConfig } from "../lib/office-jobs/infrastructure/job-config";
 import { GitHubPullRequestClient } from "../lib/office-jobs/infrastructure/github-pull-request-client";
@@ -230,6 +231,58 @@ test("coding approval carries the Atlas meeting brief into the Claude prompt", a
   assert.equal(stored?.reviewFeedback, feedback);
   assert.match(buildClaudePrompt(stored as JobRecord, config), /아틀라스 개발 사전 미팅/u);
   assert.match(buildClaudePrompt(stored as JobRecord, config), /공개 인터페이스/u);
+  repository.close();
+});
+
+test("Orbit review archives the current analysis and queues a revised pass", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const config = syntheticConfig();
+  const service = new JobService(repository, inertExecutor(), config);
+  const analysis = await runHostedPoc({
+    prompt: "Read buffer 경계 조건을 분석해 주세요",
+    executionMode: "demo",
+  });
+  const job = baseJob("Read buffer 경계 조건을 분석해 주세요");
+  job.analysis = analysis;
+  job.codingPacket = await service.buildCodingPacket(job, analysis);
+  repository.create(job);
+
+  const feedback = [
+    "[오비트 후속 분석 회의]",
+    "검토 의견: DLD의 queue depth 조건을 다시 확인해 주세요.",
+    "추가 확인 자료: .LLM/DLD, common/buffer, TopView read scenario",
+  ].join("\n");
+  const result = await service.act(job.id, {
+    action: "request_reanalysis",
+    expectedVersion: job.version,
+    analysisRunId: analysis.runId,
+    feedback,
+  }, "orbit-reanalysis-action");
+
+  assert.equal(result.job.state, "queued");
+  assert.equal(result.job.analysis, undefined);
+  assert.equal(result.job.analysisHistory.length, 1);
+  assert.equal(result.job.analysisHistory[0]?.result.runId, analysis.runId);
+  assert.equal(result.job.actions.requestReanalysis, false);
+  const stored = repository.get(job.id);
+  assert.equal(stored?.codingPacket, undefined);
+  assert.equal(stored?.analysisFeedback, feedback);
+  assert.equal(stored?.analysisStages.every((stage) => stage.status === "pending"), true);
+
+  const compact = repository.list({ limit: 10, offset: 0 }).jobs[0];
+  assert.equal(compact?.analysisPreview, undefined);
+  assert.equal(compact?.analysisHistoryPreviews[0]?.runId, analysis.runId);
+  assert.match(compact?.analysisHistoryPreviews[0]?.feedback ?? "", /queue depth/u);
+
+  const followupPrompt = buildAnalysisRequest(
+    job.prompt,
+    job.intakeBrief,
+    stored?.analysisFeedback,
+    stored?.analysisHistory?.at(-1)?.result,
+  );
+  assert.match(followupPrompt, /ORBIT_FOLLOWUP_REVIEW/u);
+  assert.match(followupPrompt, /queue depth/u);
+  assert.match(followupPrompt, new RegExp(analysis.brief.title, "u"));
   repository.close();
 });
 

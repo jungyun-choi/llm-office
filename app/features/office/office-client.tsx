@@ -37,7 +37,16 @@ export function OfficeClient() {
           onRetryConnection={workflow.retryConnection}
         />
       </main>
-      <ResultDrawer result={workflow.selectedResult} onClose={workflow.closeResult} />
+      <ResultDrawer
+        result={workflow.selectedResult}
+        job={workflow.selectedResultJob}
+        busy={workflow.busyJobId === workflow.selectedResultJob?.id}
+        onClose={workflow.closeResult}
+        onRequestReanalysis={(job, feedback) => {
+          workflow.closeResult();
+          void workflow.runAction(job, "request_reanalysis", undefined, feedback);
+        }}
+      />
     </div>
   );
 }

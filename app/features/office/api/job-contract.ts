@@ -3,6 +3,8 @@ import { z } from "zod";
 import type {
   OfficeCapabilities,
   OfficeAnalysisPreview,
+  OfficeAnalysisHistoryEntry,
+  OfficeAnalysisHistoryPreview,
   OfficeAnalysisStage,
   OfficeChangedFile,
   OfficeCodingPlan,
@@ -94,6 +96,8 @@ function normalizeJob(
   if (!id || !state) throw new JobContractError("업무 식별자 또는 상태가 없습니다.");
   const codingPacket = asRecord(record.codingPacket ?? record.coding_packet);
   const coding = normalizeCoding(record.coding ?? record.codingResult ?? record.coding_result);
+  const analysis = unwrapAnalysis(record.analysis ?? record.result);
+  const analysisRecord = asRecord(analysis);
   return {
     id,
     prompt: readString(record, ["prompt", "request", "title"]) ?? "내용이 보호된 업무",
@@ -103,8 +107,13 @@ function normalizeJob(
     updatedAt: readString(record, ["updatedAt", "updated_at"]),
     queuePosition: readNumber(record, ["queuePosition", "queue_position"]),
     detailLevel,
-    analysis: unwrapAnalysis(record.analysis ?? record.result),
+    analysis,
+    analysisRunId: analysisRecord ? readString(analysisRecord, ["runId", "run_id"]) : undefined,
     analysisPreview: normalizeAnalysisPreview(record.analysisPreview ?? record.analysis_preview),
+    analysisHistory: normalizeAnalysisHistory(record.analysisHistory ?? record.analysis_history),
+    analysisHistoryPreviews: normalizeAnalysisHistoryPreviews(
+      record.analysisHistoryPreviews ?? record.analysis_history_previews,
+    ),
     analysisStages: normalizeAnalysisStages(record.analysisStages ?? record.analysis_stages),
     coding: coding && !coding.baseSha
       ? { ...coding, baseSha: codingPacket && readString(codingPacket, ["sourceCommit", "source_commit"]) }
@@ -242,7 +251,32 @@ function normalizeActions(value: unknown): OfficeJobActions {
     answerDevelopmentQuestion: record
       ? readBoolean(record, ["answerDevelopmentQuestion", "answer_development_question"], false)
       : false,
+    requestReanalysis: record
+      ? readBoolean(record, ["requestReanalysis", "request_reanalysis"], false)
+      : false,
   };
+}
+
+function normalizeAnalysisHistory(value: unknown): readonly OfficeAnalysisHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const record = asRecord(entry);
+    const feedback = record && readString(record, ["feedback"]);
+    const archivedAt = record && readString(record, ["archivedAt", "archived_at"]);
+    if (!record || !record.result || !feedback || !archivedAt) return [];
+    return [{ result: record.result, feedback: feedback.slice(0, 4_000), archivedAt }];
+  });
+}
+
+function normalizeAnalysisHistoryPreviews(value: unknown): readonly OfficeAnalysisHistoryPreview[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const preview = normalizeAnalysisPreview(entry);
+    const record = asRecord(entry);
+    const feedback = record && readString(record, ["feedback"]);
+    const archivedAt = record && readString(record, ["archivedAt", "archived_at"]);
+    return preview && feedback && archivedAt ? [{ ...preview, feedback, archivedAt }] : [];
+  });
 }
 
 function normalizeDevelopmentQuestion(value: unknown): OfficeDevelopmentQuestion | undefined {

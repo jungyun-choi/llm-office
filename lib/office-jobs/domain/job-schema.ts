@@ -61,6 +61,11 @@ export const jobActionSchema = z.discriminatedUnion("action", [
     feedback: humanDecisionText,
   }).strict(),
   actionBase.extend({
+    action: z.literal("request_reanalysis"),
+    analysisRunId: z.string().trim().min(1).max(160),
+    feedback: humanDecisionText,
+  }).strict(),
+  actionBase.extend({
     action: z.literal("answer_development_question"),
     questionId: z.string().uuid(),
     feedback: humanDecisionText,

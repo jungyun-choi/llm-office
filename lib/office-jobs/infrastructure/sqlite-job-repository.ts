@@ -112,7 +112,8 @@ export class SqliteJobRepository implements JobRepository {
     this.database.prepare(`
       INSERT INTO office_jobs (
         id, idempotency_key, request_fingerprint, prompt, intake_brief_json, execution_mode, state,
-        version, queue_order, created_at, updated_at, analysis_json,
+        version, queue_order, created_at, updated_at, analysis_json, analysis_history_json,
+        analysis_history_previews_json, analysis_feedback,
         analysis_stages_json, coding_packet_json, base_sha, worktree_path, branch_name, claude_model,
         claude_output, changed_files_json, diff_text, diff_truncated,
         changes_digest, changes_manifest_json, test_status, test_output, test_output_truncated,
@@ -120,7 +121,7 @@ export class SqliteJobRepository implements JobRepository {
         pull_request_error, review_feedback, development_question_json, review_round, issue_url, issue_error,
         error_json, cancel_requested, attempts
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(...jobValues(record));
     return record;
@@ -161,6 +162,7 @@ export class SqliteJobRepository implements JobRepository {
           substr(json_extract(analysis_json, '$.brief.title'), 1, 160) AS analysis_title,
           substr(json_extract(analysis_json, '$.brief.objective'), 1, 1000) AS analysis_objective,
           substr(json_extract(analysis_json, '$.completedAt'), 1, 80) AS analysis_completed_at,
+          analysis_history_previews_json,
           substr(json_extract(coding_packet_json, '$.digest'), 1, 64) AS coding_packet_digest,
           branch_name,
           claude_model,
@@ -270,6 +272,7 @@ export class SqliteJobRepository implements JobRepository {
         UPDATE office_jobs SET
           idempotency_key = ?, request_fingerprint = ?, prompt = ?, intake_brief_json = ?, execution_mode = ?, state = ?,
           version = ?, queue_order = ?, created_at = ?, updated_at = ?, analysis_json = ?,
+          analysis_history_json = ?, analysis_history_previews_json = ?, analysis_feedback = ?,
           analysis_stages_json = ?, coding_packet_json = ?, base_sha = ?, worktree_path = ?, branch_name = ?, claude_model = ?,
           claude_output = ?, changed_files_json = ?, diff_text = ?, diff_truncated = ?,
           changes_digest = ?, changes_manifest_json = ?, test_status = ?, test_output = ?, test_output_truncated = ?,
@@ -342,6 +345,9 @@ export class SqliteJobRepository implements JobRepository {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         analysis_json TEXT,
+        analysis_history_json TEXT NOT NULL DEFAULT '[]',
+        analysis_history_previews_json TEXT NOT NULL DEFAULT '[]',
+        analysis_feedback TEXT,
         analysis_stages_json TEXT NOT NULL DEFAULT '[]',
         coding_packet_json TEXT,
         base_sha TEXT,
@@ -399,6 +405,15 @@ export class SqliteJobRepository implements JobRepository {
       "analysis_stages_json",
       "ALTER TABLE office_jobs ADD COLUMN analysis_stages_json TEXT NOT NULL DEFAULT '[]'",
     );
+    this.ensureColumn(
+      "analysis_history_json",
+      "ALTER TABLE office_jobs ADD COLUMN analysis_history_json TEXT NOT NULL DEFAULT '[]'",
+    );
+    this.ensureColumn(
+      "analysis_history_previews_json",
+      "ALTER TABLE office_jobs ADD COLUMN analysis_history_previews_json TEXT NOT NULL DEFAULT '[]'",
+    );
+    this.ensureColumn("analysis_feedback", "ALTER TABLE office_jobs ADD COLUMN analysis_feedback TEXT");
     this.ensureColumn("intake_brief_json", "ALTER TABLE office_jobs ADD COLUMN intake_brief_json TEXT");
     this.ensureColumn(
       "changes_manifest_json",
@@ -446,6 +461,9 @@ function jobValues(record: JobRecord): SqlValue[] {
     record.createdAt,
     record.updatedAt,
     jsonValue(record.analysis),
+    JSON.stringify(record.analysisHistory ?? []),
+    JSON.stringify(createAnalysisHistoryPreviews(record)),
+    record.analysisFeedback ?? null,
     JSON.stringify(record.analysisStages),
     jsonValue(record.codingPacket),
     record.baseSha ?? null,
@@ -491,6 +509,8 @@ function rowToJob(row: DatabaseRow): JobRecord {
     createdAt: stringValue(row.created_at),
     updatedAt: stringValue(row.updated_at),
     analysis: parseJson(row.analysis_json),
+    analysisHistory: parseJson(row.analysis_history_json) ?? [],
+    analysisFeedback: optionalString(row.analysis_feedback),
     analysisStages: parseJson(row.analysis_stages_json) ?? [],
     codingPacket: parseJson(row.coding_packet_json),
     baseSha: optionalString(row.base_sha),
@@ -547,6 +567,7 @@ function rowToListJob(row: DatabaseRow): JobListRecord {
     updatedAt: stringValue(row.updated_at),
     queuePosition: optionalNumber(row.queue_position),
     analysisPreview,
+    analysisHistoryPreviews: parseJson(row.analysis_history_previews_json) ?? [],
     analysisStages: parseJson(row.analysis_stages_json) ?? [],
     codingPacketDigest: optionalString(row.coding_packet_digest),
     branchName: optionalString(row.branch_name),
@@ -567,6 +588,18 @@ function rowToListJob(row: DatabaseRow): JobListRecord {
     issueError: optionalString(row.issue_error),
     error: parseJson(row.error_json),
   };
+}
+
+function createAnalysisHistoryPreviews(record: JobRecord): JobListRecord["analysisHistoryPreviews"] {
+  return (record.analysisHistory ?? []).map((entry) => ({
+    jobId: record.id,
+    runId: entry.result.runId,
+    title: entry.result.brief.title,
+    objective: entry.result.brief.objective,
+    completedAt: entry.result.completedAt,
+    feedback: entry.feedback.slice(0, 320),
+    archivedAt: entry.archivedAt,
+  }));
 }
 
 function recoveryEvent(

@@ -131,6 +131,8 @@ function createJob(
     createdAt: "2026-07-22T00:00:00.000Z",
     queuePosition,
     analysisStages: [],
+    analysisHistory: [],
+    analysisHistoryPreviews: [],
     events: [],
     actions: {
       approveCoding: false,
@@ -141,6 +143,7 @@ function createJob(
       requestChanges: false,
       mergePr: false,
       answerDevelopmentQuestion: false,
+      requestReanalysis: false,
     },
     version,
   };

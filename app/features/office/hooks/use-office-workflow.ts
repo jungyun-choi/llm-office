@@ -31,6 +31,7 @@ export interface OfficeWorkflowState {
   focusJob: OfficeJob | null;
   results: readonly OfficeResultPreview[];
   selectedResult: OfficeResult | null;
+  selectedResultJob: OfficeJob | null;
   capabilities: OfficeCapabilities;
   connectionMode: OfficeConnectionMode;
   serverError: string | null;
@@ -196,7 +197,7 @@ export function useOfficeWorkflow(): OfficeWorkflowState {
       ? Promise.resolve(known)
       : loadJobDetail(candidate.jobId);
     void detail.then((job) => {
-      const result = getJobAnalysisResult(job);
+      const result = getJobAnalysisResult(job, candidate.runId);
       if (!result) throw new Error("완료된 분석 결과를 불러오지 못했습니다.");
       if (mountedRef.current) setSelectedResult(result);
     }).catch((error) => {
@@ -204,6 +205,9 @@ export function useOfficeWorkflow(): OfficeWorkflowState {
     });
   }, [loadJobDetail]);
   const closeResult = useCallback(() => setSelectedResult(null), []);
+  const selectedResultJob = selectedResult?.sourceJobId
+    ? jobs.find((job) => job.id === selectedResult.sourceJobId) ?? null
+    : null;
   const retryConnection = useCallback(() => {
     setConnectionMode("checking");
     void refreshJobs();
@@ -215,6 +219,7 @@ export function useOfficeWorkflow(): OfficeWorkflowState {
     focusJob,
     results,
     selectedResult,
+    selectedResultJob,
     capabilities,
     connectionMode,
     serverError,

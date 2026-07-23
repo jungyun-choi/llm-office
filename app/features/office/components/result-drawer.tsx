@@ -4,7 +4,8 @@ import { FileText, Info, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { OFFICE_COPY } from "../copy";
-import type { OfficeResult } from "../types";
+import type { OfficeJob, OfficeResult } from "../types";
+import { AnalysisReviewMeeting } from "./analysis-review-meeting";
 import { IssueDraftCard } from "./issue-draft-card";
 import { ResultEngineCard } from "./result-engine-card";
 import { RoleOutputList } from "./role-output-list";
@@ -12,10 +13,13 @@ import { WorkBreakdown } from "./work-breakdown";
 
 interface ResultDrawerProps {
   result: OfficeResult | null;
+  job: OfficeJob | null;
+  busy: boolean;
   onClose: () => void;
+  onRequestReanalysis: (job: OfficeJob, feedback: string) => void;
 }
 
-export function ResultDrawer({ result, onClose }: ResultDrawerProps) {
+export function ResultDrawer({ result, job, busy, onClose, onRequestReanalysis }: ResultDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
 
@@ -23,6 +27,7 @@ export function ResultDrawer({ result, onClose }: ResultDrawerProps) {
     if (!result) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector(".analysis-review-meeting")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -61,9 +66,9 @@ export function ResultDrawer({ result, onClose }: ResultDrawerProps) {
       >
         <header>
           <div>
-            <span>{OFFICE_COPY.drawer.eyebrow}</span>
+            <span>ANALYSIS WORKSPACE · {result.isCurrentRevision === false ? "ARCHIVED" : "CURRENT"}</span>
             <h2 id="result-drawer-title">{result.title}</h2>
-            <p>{result.createdAt} · {OFFICE_COPY.drawer.syntheticNotice}</p>
+            <p>{result.createdAt}</p>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label={OFFICE_COPY.drawer.close}>
             <X size={19} />
@@ -75,6 +80,26 @@ export function ResultDrawer({ result, onClose }: ResultDrawerProps) {
             <div><span>{OFFICE_COPY.drawer.requestLabel}</span><p>{result.request}</p></div>
           </div>
           <p className="result-summary">{result.summary}</p>
+          {result.reviewFeedback && (
+            <section className="result-review-feedback">
+              <span>이 결과 뒤에 남긴 검토 의견</span>
+              <p>{result.reviewFeedback}</p>
+            </section>
+          )}
+          {job && canRequestReanalysis(result, job) && (
+            <section className="result-review-action">
+              <div>
+                <span>ANALYSIS REVIEW</span>
+                <strong>결과가 부족하면 같은 업무를 다시 분석할 수 있습니다</strong>
+                <p>현재 결과는 기록실에 보관되고, 회의 내용이 다음 분석팀의 우선 확인 사항으로 전달됩니다.</p>
+              </div>
+              <AnalysisReviewMeeting
+                result={result}
+                busy={busy}
+                onSubmit={(feedback) => onRequestReanalysis(job, feedback)}
+              />
+            </section>
+          )}
           <ResultEngineCard engine={result.engine} />
           <RoleOutputList outputs={result.roleOutputs} />
           <div className="result-sections">
@@ -94,6 +119,16 @@ export function ResultDrawer({ result, onClose }: ResultDrawerProps) {
         </div>
       </section>
     </div>
+  );
+}
+
+function canRequestReanalysis(result: OfficeResult, job: OfficeJob | null): boolean {
+  return Boolean(
+    job &&
+    result.isCurrentRevision !== false &&
+    result.id === job.analysisRunId &&
+    job.state === "awaiting_coding_approval" &&
+    job.actions.requestReanalysis,
   );
 }
 

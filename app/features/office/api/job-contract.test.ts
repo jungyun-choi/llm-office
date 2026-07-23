@@ -60,6 +60,7 @@ const BASE_JOB = {
     requestChanges: false,
     mergePr: false,
     answerDevelopmentQuestion: false,
+    requestReanalysis: false,
   },
   events: [{ id: 1, kind: "state", state: "changes_ready", message: "검토 준비", createdAt: "2026-07-22T00:01:00.000Z" }],
 };
@@ -87,6 +88,36 @@ test("bare and wrapped JobDTO responses are normalized", () => {
   ]);
   assert.equal(bare.analysisStages[1]?.phase, "calling_model");
   assert.equal(bare.analysisStages[1]?.attempt, 1);
+});
+
+test("analysis revision history is preserved in detail and compact list contracts", () => {
+  const archivedAt = "2026-07-22T00:02:00.000Z";
+  const detail = parseJobPayload({
+    ...BASE_JOB,
+    analysisHistory: [{
+      result: { runId: "analysis-old" },
+      feedback: "DLD 조건을 다시 확인해 주세요.",
+      archivedAt,
+    }],
+  });
+  const list = parseJobsPayload({
+    items: [{
+      ...BASE_JOB,
+      analysisHistoryPreviews: [{
+        jobId: "job-1",
+        runId: "analysis-old",
+        title: "이전 분석",
+        objective: "이전 결론",
+        completedAt: "2026-07-22T00:01:00.000Z",
+        feedback: "DLD 조건을 다시 확인해 주세요.",
+        archivedAt,
+      }],
+    }],
+  });
+
+  assert.equal(detail.analysisHistory[0]?.feedback, "DLD 조건을 다시 확인해 주세요.");
+  assert.equal(list.jobs[0]?.analysisHistoryPreviews[0]?.runId, "analysis-old");
+  assert.equal(list.jobs[0]?.analysisHistoryPreviews[0]?.archivedAt, archivedAt);
 });
 
 test("job display data redacts absolute worktree paths", () => {

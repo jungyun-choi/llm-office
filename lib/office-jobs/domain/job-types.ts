@@ -56,6 +56,17 @@ export interface AnalysisStage {
   summary?: string;
 }
 
+export interface AnalysisHistoryEntry {
+  result: PocRunResult;
+  feedback: string;
+  archivedAt: string;
+}
+
+export interface AnalysisHistoryPreview extends AnalysisPreview {
+  feedback: string;
+  archivedAt: string;
+}
+
 export interface ChangeManifestEntry {
   path: string;
   type: "file" | "deletion";
@@ -127,6 +138,8 @@ export interface JobRecord {
   createdAt: string;
   updatedAt: string;
   analysis?: PocRunResult;
+  analysisHistory?: AnalysisHistoryEntry[];
+  analysisFeedback?: string;
   analysisStages: AnalysisStage[];
   codingPacket?: CodingPacket;
   baseSha?: string;
@@ -186,6 +199,7 @@ export interface JobListRecord {
   updatedAt: string;
   queuePosition?: number;
   analysisPreview?: AnalysisPreview;
+  analysisHistoryPreviews: AnalysisHistoryPreview[];
   analysisStages: AnalysisStage[];
   codingPacketDigest?: string;
   branchName?: string;
@@ -228,6 +242,7 @@ export interface JobDto {
   updatedAt: string;
   queuePosition?: number;
   analysis?: PocRunResult;
+  analysisHistory: AnalysisHistoryEntry[];
   analysisStages: AnalysisStage[];
   codingPacket?: CodingPacket;
   coding: {
@@ -266,6 +281,7 @@ export interface JobDto {
     requestChanges: boolean;
     mergePr: boolean;
     answerDevelopmentQuestion: boolean;
+    requestReanalysis: boolean;
   };
   events: JobEvent[];
 }
@@ -280,6 +296,7 @@ export interface JobListItemDto {
   updatedAt: string;
   queuePosition?: number;
   analysisPreview?: AnalysisPreview;
+  analysisHistoryPreviews: AnalysisHistoryPreview[];
   analysisStages: AnalysisStage[];
   codingPacketDigest?: string;
   coding: {

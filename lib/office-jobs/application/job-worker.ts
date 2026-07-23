@@ -107,7 +107,12 @@ export class JobWorker {
         updatedAt: new Date().toISOString(),
       });
       const analysis = await this.executor.runAnalysis(
-        buildAnalysisRequest(current.prompt, current.intakeBrief),
+        buildAnalysisRequest(
+          current.prompt,
+          current.intakeBrief,
+          current.analysisFeedback,
+          current.analysisHistory?.at(-1)?.result,
+        ),
         current.executionMode,
         `analysis:${current.id}:${current.attempts}`,
         signal,

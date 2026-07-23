@@ -28,6 +28,7 @@ import {
 
 const TERMINAL_STATES = new Set<JobState>(["completed", "failed", "canceled"]);
 const RUNNING_STATES = new Set<JobState>(["analyzing", "coding", "testing", "publishing"]);
+const MAX_ANALYSIS_HISTORY = 8;
 
 export interface JobListDto {
   items: JobListItemDto[];
@@ -164,6 +165,8 @@ export class JobService {
       patch = this.queuePublishing(current, input.artifactDigest, input.mode);
     } else if (input.action === "request_changes") {
       patch = await this.requestChanges(current, input.feedback);
+    } else if (input.action === "request_reanalysis") {
+      patch = this.requestReanalysis(current, input.analysisRunId, input.feedback);
     } else if (input.action === "answer_development_question") {
       patch = this.answerDevelopmentQuestion(current, input.questionId, input.feedback);
     } else if (input.action === "cancel") patch = this.cancel(current);
@@ -281,6 +284,7 @@ export class JobService {
       updatedAt: record.updatedAt,
       queuePosition: this.repository.queuePosition(record.id),
       analysis: record.analysis,
+      analysisHistory: record.analysisHistory ?? [],
       analysisStages: record.analysisStages,
       codingPacket: record.codingPacket,
       coding: {
@@ -326,6 +330,7 @@ export class JobService {
       updatedAt: record.updatedAt,
       queuePosition: record.queuePosition,
       analysisPreview: record.analysisPreview,
+      analysisHistoryPreviews: record.analysisHistoryPreviews,
       analysisStages: record.analysisStages,
       codingPacketDigest: record.codingPacketDigest,
       coding: {
@@ -356,7 +361,20 @@ export class JobService {
   }
 
   private availableActions(
-    record: Pick<JobRecord, "state" | "testStatus" | "diffTruncated" | "error" | "pullRequestUrl" | "pullRequestNumber" | "changesDigest" | "developmentQuestion">,
+    record: Pick<
+      JobRecord,
+      | "state"
+      | "testStatus"
+      | "diffTruncated"
+      | "error"
+      | "pullRequestUrl"
+      | "pullRequestNumber"
+      | "changesDigest"
+      | "developmentQuestion"
+    > & {
+      analysis?: JobRecord["analysis"];
+      analysisPreview?: JobListRecord["analysisPreview"];
+    },
     queuedForExecution: boolean,
   ): JobDto["actions"] {
     const testPassed = record.testStatus === "passed";
@@ -376,6 +394,9 @@ export class JobService {
       ),
       answerDevelopmentQuestion: record.state === "awaiting_development_input" &&
         record.developmentQuestion?.status === "open" && this.config.codingEnabled,
+      requestReanalysis: record.state === "awaiting_coding_approval" && Boolean(
+        record.analysis ?? record.analysisPreview,
+      ),
     };
   }
 
@@ -486,6 +507,34 @@ export class JobService {
       issueUrl: undefined,
       issueError: undefined,
       updatedAt: new Date().toISOString(),
+      error: undefined,
+      cancelRequested: false,
+    };
+  }
+
+  private requestReanalysis(
+    current: JobRecord,
+    analysisRunId: string,
+    feedback: string,
+  ): Partial<JobRecord> {
+    if (current.state !== "awaiting_coding_approval" || !current.analysis) {
+      throw invalidAction("구현 승인 전의 최신 분석 결과만 추가 분석할 수 있습니다.");
+    }
+    if (current.analysis.runId !== analysisRunId) throw artifactConflict();
+    const archivedAt = new Date().toISOString();
+    const history = [
+      ...(current.analysisHistory ?? []),
+      { result: current.analysis, feedback: feedback.trim(), archivedAt },
+    ].slice(-MAX_ANALYSIS_HISTORY);
+    return {
+      state: "queued",
+      queueOrder: this.repository.nextQueueOrder(),
+      updatedAt: archivedAt,
+      analysis: undefined,
+      analysisHistory: history,
+      analysisFeedback: feedback.trim(),
+      analysisStages: initialAnalysisStages(),
+      codingPacket: undefined,
       error: undefined,
       cancelRequested: false,
     };
@@ -721,6 +770,7 @@ function actionMessage(action: JobActionInput["action"]): string {
   if (action === "approve_coding") return "사용자가 Claude 코딩을 승인했습니다.";
   if (action === "publish_changes") return "사용자가 변경 게시를 승인했습니다.";
   if (action === "request_changes") return "사용자가 PR 리뷰 피드백과 함께 재개발을 요청했습니다.";
+  if (action === "request_reanalysis") return "사용자가 오비트와 후속 회의를 마치고 추가 분석을 요청했습니다.";
   if (action === "answer_development_question") return "사용자가 개발팀 질문에 답변해 작업을 재개했습니다.";
   if (action === "merge_pr") return "사용자가 PR 최종 머지를 승인했습니다.";
   if (action === "cancel") return "사용자가 업무 취소를 요청했습니다.";

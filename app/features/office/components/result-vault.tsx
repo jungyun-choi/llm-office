@@ -33,7 +33,8 @@ export function ResultVault({ results, isReceiving, onOpen }: ResultVaultProps) 
               <button type="button" onClick={() => onOpen(result)}>
                 <span className="result-stack__file" aria-hidden="true"><FileText size={15} /></span>
                 <span>
-                  {index === 0 && <small>{OFFICE_COPY.vault.newResult}</small>}
+                  {result.isCurrentRevision !== false && index === 0 && <small>{OFFICE_COPY.vault.newResult}</small>}
+                  {result.isCurrentRevision === false && <small>이전 분석 · 의견 반영 전</small>}
                   <strong>{result.title}</strong>
                   <span>{result.createdAt}</span>
                 </span>

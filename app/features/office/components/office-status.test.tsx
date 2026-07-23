@@ -12,6 +12,8 @@ import { getPocTruthLabel } from "./task-composer";
 import { MeetingRoom } from "./meeting-room";
 import { TaskQueueHistory } from "./task-queue-history";
 import { ResultVault } from "./result-vault";
+import { ResultDrawer } from "./result-drawer";
+import { buildReviewFeedback } from "./analysis-review-meeting";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
 import { ReviewDispatchDesk, canApproveCoding } from "./review-dispatch-desk";
 import {
@@ -34,6 +36,7 @@ import {
 } from "../workflow-elapsed-time";
 import { buildPocRunResult } from "../../../../lib/poc/application/poc-result-builder";
 import { runDemoPoc } from "../../../../lib/poc/infrastructure/demo-poc-runner";
+import { getJobAnalysisResult } from "../job-analysis";
 import {
   buildDevelopmentMeetingBrief,
   createDevelopmentMeetingQuestions,
@@ -179,6 +182,36 @@ test("result archive renders every result as a separate selectable row", () => {
   assert.match(markup, /보관 결과 6/u);
   assert.equal((markup.match(/<li>/gu) ?? []).length, 6);
   assert.doesNotMatch(markup, /--stack-index/u);
+});
+
+test("analysis workspace offers an Orbit follow-up meeting for the current result", () => {
+  const timestamp = "2026-07-23T02:00:00.000Z";
+  const analysis = buildPocRunResult(runDemoPoc("DLD queue depth를 재검토해줘"), timestamp, timestamp);
+  const job: OfficeJob = {
+    ...createJob("job-analysis-review", "DLD queue depth를 재검토해줘", "awaiting_coding_approval"),
+    analysis,
+    analysisRunId: analysis.runId,
+    actions: { ...EMPTY_ACTIONS, requestReanalysis: true },
+  };
+  const result = getJobAnalysisResult(job);
+  assert.ok(result);
+  const markup = renderToStaticMarkup(
+    <ResultDrawer
+      result={result}
+      job={job}
+      busy={false}
+      onClose={() => undefined}
+      onRequestReanalysis={() => undefined}
+    />,
+  );
+
+  assert.match(markup, /ANALYSIS WORKSPACE · CURRENT/u);
+  assert.match(markup, /오비트와 추가 분석 회의/u);
+  assert.match(markup, /현재 결과는 기록실에 보관/u);
+  assert.equal(
+    buildReviewFeedback("DLD 조건 재확인", ".LLM/DLD", "코드 근거 명시"),
+    "[오비트 후속 분석 회의]\n검토 의견: DLD 조건 재확인\n추가 확인 자료: .LLM/DLD\n기대 결과: 코드 근거 명시",
+  );
 });
 
 test("coding approval is visible only at the explicit human gate", () => {
@@ -524,6 +557,7 @@ const EMPTY_ACTIONS: OfficeJob["actions"] = {
   requestChanges: false,
   mergePr: false,
   answerDevelopmentQuestion: false,
+  requestReanalysis: false,
 };
 
 const CAPABILITIES: OfficeCapabilities = {
@@ -538,6 +572,8 @@ function createJob(id: string, prompt: string, state: OfficeJob["state"]): Offic
     state,
     createdAt: "2026-07-22T00:00:00.000Z",
     analysisStages: [],
+    analysisHistory: [],
+    analysisHistoryPreviews: [],
     events: [],
     actions: EMPTY_ACTIONS,
   };

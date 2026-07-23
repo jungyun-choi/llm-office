@@ -40,6 +40,7 @@ export type OfficeJobAction =
   | "approve_coding"
   | "publish_changes"
   | "request_changes"
+  | "request_reanalysis"
   | "answer_development_question"
   | "merge_pr"
   | "cancel"
@@ -144,6 +145,9 @@ export interface OfficeResult {
   workItems: readonly OfficeWorkItem[];
   engine: OfficeEngineInfo;
   notices: readonly string[];
+  sourceJobId?: string;
+  isCurrentRevision?: boolean;
+  reviewFeedback?: string;
 }
 
 export interface OrbitIntakeBrief {
@@ -226,6 +230,7 @@ export interface OfficeJobActions {
   requestChanges: boolean;
   mergePr: boolean;
   answerDevelopmentQuestion: boolean;
+  requestReanalysis: boolean;
 }
 
 export interface OfficeJobError {
@@ -262,12 +267,25 @@ export interface OfficeAnalysisPreview {
   completedAt: string;
 }
 
+export interface OfficeAnalysisHistoryEntry {
+  result: unknown;
+  feedback: string;
+  archivedAt: string;
+}
+
+export interface OfficeAnalysisHistoryPreview extends OfficeAnalysisPreview {
+  feedback: string;
+  archivedAt: string;
+}
+
 export interface OfficeResultPreview {
   jobId: string;
   runId: string;
   title: string;
   summary: string;
   createdAt: string;
+  isCurrentRevision?: boolean;
+  reviewFeedback?: string;
 }
 
 export interface OfficeJob {
@@ -280,7 +298,10 @@ export interface OfficeJob {
   queuePosition?: number;
   detailLevel?: "summary" | "full";
   analysis?: unknown;
+  analysisRunId?: string;
   analysisPreview?: OfficeAnalysisPreview;
+  analysisHistory: readonly OfficeAnalysisHistoryEntry[];
+  analysisHistoryPreviews: readonly OfficeAnalysisHistoryPreview[];
   analysisStages: readonly OfficeAnalysisStage[];
   coding?: OfficeCodingResult;
   codingPlan?: OfficeCodingPlan;

@@ -139,10 +139,9 @@ export const OFFICE_COPY = {
     roleOutputsLabel: "에이전트 메모",
     workBreakdownLabel: "작업 분해",
     dependenciesLabel: "선행 작업",
-    evidenceLabel: "합성 근거",
+    evidenceLabel: "근거 자료",
     noticesLabel: "안내",
     noDependencies: "바로 시작 가능",
-    syntheticNotice: "합성 저장소만 사용한 POC 결과입니다.",
   },
   error: {
     title: "사무실 화면을 불러오지 못했어요",

@@ -1,10 +1,32 @@
+import type { PocRunResult } from "../../poc/domain/poc-types";
 import type { OrbitIntakeBrief } from "./job-types";
 
 export function buildAnalysisRequest(
   originalRequest: string,
   brief: OrbitIntakeBrief | undefined,
+  followupFeedback?: string,
+  previousAnalysis?: PocRunResult,
 ): string {
-  if (!brief) return originalRequest;
+  const confirmedRequest = brief
+    ? buildConfirmedBrief(originalRequest, brief)
+    : originalRequest;
+  if (!followupFeedback) return confirmedRequest;
+  return [
+    confirmedRequest,
+    "[ORBIT_FOLLOWUP_REVIEW]",
+    `Human review: ${followupFeedback}`,
+    previousAnalysis ? `Previous title: ${previousAnalysis.brief.title}` : undefined,
+    previousAnalysis ? `Previous objective: ${previousAnalysis.brief.objective}` : undefined,
+    previousAnalysis
+      ? `Previous role summaries: ${previousAnalysis.roleOutputs
+        .map((output) => `${output.role}: ${output.summary}`)
+        .join(" | ")}`
+      : undefined,
+    "Re-check the questioned parts with repository evidence. Keep valid prior findings, correct weak claims, and return a complete revised analysis.",
+  ].filter(Boolean).join("\n");
+}
+
+function buildConfirmedBrief(originalRequest: string, brief: OrbitIntakeBrief): string {
   const normalizedOriginal = originalRequest.replace(/\s+/gu, " ").trim();
   const objectivePrefix = brief.objective.endsWith("…")
     ? brief.objective.slice(0, -1)
