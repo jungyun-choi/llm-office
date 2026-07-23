@@ -10,13 +10,13 @@ import {
   GitMerge,
   MessageSquareText,
   RotateCcw,
-  Send,
   ShieldCheck,
   X,
 } from "lucide-react";
 
 import { getJobAnalysisResult } from "../job-analysis";
 import type { OfficeCapabilities, OfficeJob, OfficeJobAction, OfficeResult, PublishMode } from "../types";
+import { DevelopmentLeadMeeting } from "./development-lead-meeting";
 
 interface ReviewDispatchDeskProps {
   job: OfficeJob | null;
@@ -52,14 +52,12 @@ export function ReviewDispatchDesk(props: ReviewDispatchDeskProps) {
         </button>
       )}
       {canApproveCoding(props.job) && (
-        <button
-          className="review-dispatch__primary"
-          type="button"
-          disabled={props.busy}
-          onClick={() => props.onAction(props.job as OfficeJob, "approve_coding")}
-        >
-          <Send size={17} aria-hidden="true" />Claude에게 구현 맡기기
-        </button>
+        <DevelopmentLeadMeeting
+          key={`${props.job?.id}:${props.job?.version ?? 0}`}
+          job={props.job as OfficeJob}
+          busy={props.busy}
+          onApprove={(feedback) => props.onAction(props.job as OfficeJob, "approve_coding", undefined, feedback)}
+        />
       )}
       {canPublishCommit(props.job, props.capabilities) && (
         <div className="review-dispatch__publish">
@@ -250,7 +248,7 @@ function getReviewTitle(job: OfficeJob | null): string {
 function getReviewDescription(job: OfficeJob | null): string {
   if (!job) return "오비트에게 업무를 맡기면 분석 패킷이 이곳에 도착합니다.";
   if (job.error) return job.error.message;
-  if (job.state === "awaiting_coding_approval") return "내용을 확인한 뒤 승인하세요. 승인 전에는 Claude가 코드를 수정하지 않습니다.";
+  if (job.state === "awaiting_coding_approval") return "분석 패킷을 확인하고 아틀라스 팀장과 구현 범위·완료 조건을 맞춘 뒤 승인하세요.";
   if (job.state === "changes_ready") return "변경 파일, Diff, 테스트 결과를 확인한 뒤 Git 반영 범위를 선택하세요.";
   if (job.state === "review_pending") return "PR 링크에서 구현과 리뷰 코멘트를 확인한 뒤 수정 요청 또는 최종 머지를 선택하세요.";
   if (job.state === "completed") return job.coding?.pullRequestUrl

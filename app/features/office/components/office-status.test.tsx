@@ -9,6 +9,7 @@ import { AgentDesk, getAgentStateLabel } from "./agent-desk";
 import { OfficeHeader } from "./office-header";
 import { formatExecutionSummary, ResultEngineCard } from "./result-engine-card";
 import { getPocTruthLabel } from "./task-composer";
+import { MeetingRoom } from "./meeting-room";
 import { TaskQueueHistory } from "./task-queue-history";
 import { ResultVault } from "./result-vault";
 import { WorkflowElapsedStatus } from "./workflow-elapsed-status";
@@ -33,6 +34,10 @@ import {
 } from "../workflow-elapsed-time";
 import { buildPocRunResult } from "../../../../lib/poc/application/poc-result-builder";
 import { runDemoPoc } from "../../../../lib/poc/infrastructure/demo-poc-runner";
+import {
+  buildDevelopmentMeetingBrief,
+  createDevelopmentMeetingQuestions,
+} from "../development-meeting";
 
 const ZEN_ENGINE: OfficeEngineInfo = {
   label: "OpenCode Zen 합성 POC 런타임",
@@ -185,8 +190,60 @@ test("coding approval is visible only at the explicit human gate", () => {
 
   assert.equal(canApproveCoding(awaiting), true);
   assert.equal(canApproveCoding(coding), false);
-  assert.match(renderReviewDesk(awaiting), /Claude에게 구현 맡기기/u);
-  assert.doesNotMatch(renderReviewDesk(coding), /Claude에게 구현 맡기기/u);
+  assert.match(renderReviewDesk(awaiting), /아틀라스 팀장과 개발 미팅/u);
+  assert.doesNotMatch(renderReviewDesk(coding), /아틀라스 팀장과 개발 미팅/u);
+});
+
+test("Orbit and Atlas meetings share a visible conference room", () => {
+  const markup = renderToStaticMarkup(
+    <MeetingRoom
+      id="meeting-test"
+      theme="development"
+      eyebrow="HUMAN GATE"
+      title="개발 미팅"
+      description="분석 패킷을 함께 확인합니다."
+      hostName="아틀라스"
+      hostRole="개발팀장"
+      hostModel="Claude Opus"
+      onClose={() => undefined}
+    >
+      <p>회의 내용</p>
+    </MeetingRoom>,
+  );
+
+  assert.match(markup, /meeting-room__scene/u);
+  assert.match(markup, /SHARED BRIEF/u);
+  assert.match(markup, /아틀라스/u);
+  assert.match(markup, /YOU/u);
+});
+
+test("development meeting compacts only confirmed human context for Claude", () => {
+  const job: OfficeJob = {
+    ...createJob("job-development-meeting", "Read buffer를 늘려줘", "awaiting_coding_approval"),
+    intakeBrief: {
+      version: "1",
+      objective: "Read buffer 상한 확장",
+      assumptions: ["기존 인터페이스는 유지한다"],
+    },
+    codingPlan: {
+      objective: "Read buffer 상한 확장",
+      scope: ["FTL 버퍼 설정과 경계 검증 변경"],
+      allowedPaths: ["common", "FTL"],
+    },
+  };
+  const questions = createDevelopmentMeetingQuestions(job);
+  const brief = buildDevelopmentMeetingBrief(job, questions, {
+    boundaries: "common 인터페이스는 바꾸지 말아 주세요.",
+    acceptance: "경계값 회귀 테스트를 통과해야 합니다.",
+  });
+
+  assert.equal(questions.length, 3);
+  assert.match(questions[0]?.prompt ?? "", /기존 인터페이스/u);
+  assert.match(brief.packetSummary, /FTL 버퍼/u);
+  assert.match(brief.feedback, /아틀라스 개발 사전 미팅/u);
+  assert.match(brief.feedback, /common 인터페이스/u);
+  assert.match(brief.feedback, /경계값 회귀 테스트/u);
+  assert.ok(brief.feedback.length <= 4_000);
 });
 
 test("final PR review is rendered as a second human gate", () => {
@@ -227,13 +284,13 @@ test("Claude stations map coding, testing, and Git approval states", () => {
   assert.equal(getImplementationPlanIndex(testing), 3);
   assert.equal(getImplementationPlanIndex(publishing), 5);
   assert.deepEqual(getDevelopmentExchange(coding), {
-    from: "Opus 팀장",
-    to: "Sonnet 구현",
+    from: "아틀라스",
+    to: "메이슨",
     message: "구현 지시 전달 · 막히는 내용은 근거와 함께 팀장에게 보고합니다.",
     tone: "active",
   });
-  assert.equal(getDevelopmentExchange(testing).to, "Sonnet 검증");
-  assert.equal(getDevelopmentExchange(publishing).to, "Haiku Git");
+  assert.equal(getDevelopmentExchange(testing).to, "베라");
+  assert.equal(getDevelopmentExchange(publishing).to, "릴레이");
 });
 
 test("analysis failures never look like Claude code failures", () => {
@@ -318,13 +375,14 @@ test("Claude team shows a safe implementation plan and verified file targets", (
 
   assert.match(markup, /개발팀 작업 현황/u);
   assert.match(markup, /Opus · Sonnet · Haiku 협업 런타임/u);
-  assert.match(markup, /클로드 팀장/u);
+  assert.match(markup, /아틀라스/u);
+  assert.match(markup, /메이슨/u);
+  assert.match(markup, /베라/u);
+  assert.match(markup, /릴레이/u);
   assert.match(markup, /Claude Opus/u);
   assert.equal((markup.match(/Claude Sonnet/gu) ?? []).length, 4);
   assert.match(markup, /Claude Haiku/u);
   assert.match(markup, /TEAM HANDOFF/u);
-  assert.match(markup, /Opus 팀장/u);
-  assert.match(markup, /Sonnet 구현/u);
   assert.match(markup, /허용된 경로에서 코드 구현/u);
   assert.match(markup, /읽기 버퍼 상한과 경계 검증을 함께 확장/u);
   assert.match(markup, /poc\/simulator\/src/u);

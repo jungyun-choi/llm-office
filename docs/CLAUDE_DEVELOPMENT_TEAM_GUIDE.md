@@ -20,12 +20,15 @@
 
 ## 2. 목표 팀 구성
 
-| 역할 | 기본 모델 등급 | 책임 | 코드 쓰기 |
-|---|---|---|---|
-| `lead` | Opus | 계획, 업무 분배, Diff 리뷰, 막힘 해결, 최종 판단 | 원칙적으로 읽기 전용 |
-| `implementation` | Sonnet | 코드·테스트 구현, 막힘 보고, 재작업 | 허용 |
-| `verification` | Sonnet | 독립 코드 리뷰, 테스트, 회귀 위험 검증 | 테스트 보강만 선택적으로 허용 |
-| `git` | Haiku | 승인된 변경의 Commit·Push·PR | Git 승인 후에만 허용 |
+| 역할 | UI 이름 | 기본 모델 등급 | 책임 | 코드 쓰기 |
+|---|---|---|---|---|
+| `lead` | 아틀라스 | Opus | 계획, 업무 분배, Diff 리뷰, 막힘 해결, 최종 판단 | 원칙적으로 읽기 전용 |
+| `implementation` | 메이슨 | Sonnet | 코드·테스트 구현, 막힘 보고, 재작업 | 허용 |
+| `verification` | 베라 | Sonnet | 독립 코드 리뷰, 테스트, 회귀 위험 검증 | 테스트 보강만 선택적으로 허용 |
+| `git` | 릴레이 | Haiku | 승인된 변경의 Commit·Push·PR | Git 승인 후에만 허용 |
+
+UI 이름은 사람이 팀의 흐름을 빠르게 구분하기 위한 호출명이다. API와 저장소에서는 안정적인
+role ID(`lead`, `implementation`, `verification`, `git`)를 사용한다.
 
 모델 ID는 코드에 고정하지 않는다. 회사 model catalog의 정확한 ID를 환경 변수로 받는다.
 
@@ -45,7 +48,9 @@ capabilities API는 각 역할의 표시 이름과 실제 선택된 model ID를 
 프로세스 + 서버 상태 머신**을 권장한다.
 
 ```text
-Human Gate 1: 구현 승인
+Human Gate 1: 아틀라스 개발 사전 미팅 + 구현 승인
+  -> lead_questions(Opus): 분석 패킷의 빈칸을 최대 3개 질문
+  -> 사람 답변을 짧은 development brief로 확정
   -> lead_plan(Opus)
   -> implementation(Sonnet)
   -> lead_code_review(Opus)
@@ -60,6 +65,66 @@ Human Gate 1: 구현 승인
 
 Opus가 반환한 `nextAction`을 서버가 해석해 다음 담당자를 호출한다. 개념적으로 Opus가 팀원을
 지휘하지만, 프로세스 생명주기와 상태 저장은 서버가 담당한다.
+
+### 3.1 아틀라스 개발 사전 미팅
+
+분석팀이 coding packet을 완성했다고 바로 코딩하지 않는다. Job이
+`awaiting_coding_approval`에 도착하면 사용자가 분석 패킷을 읽고 아틀라스와 한 번 더 짧게
+회의한다.
+
+아틀라스는 다음 입력을 읽는다.
+
+- 확정된 Orbit intake brief
+- 분석팀 role outputs와 최종 brief
+- allowed paths와 source commit
+- 분석팀이 남긴 assumptions, unresolved risks, test expectations
+
+그 뒤 구현 결과에 가장 큰 영향을 주는 빈칸만 최대 3개 질문한다. 이미 패킷에 답이 있는
+내용을 다시 묻지 않으며, 질문이 필요 없으면 빈 배열을 반환할 수 있다.
+
+권장 API:
+
+```http
+POST /api/v1/jobs/:jobId/development-meeting/questions
+Content-Type: application/json
+
+{ "expectedVersion": 12, "artifactDigest": "..." }
+```
+
+```ts
+interface DevelopmentMeetingQuestionOutput {
+  source: "company-claude";
+  model: string;
+  questions: Array<{
+    id: "packet_gap" | "boundaries" | "acceptance";
+    prompt: string;
+    hint: string;
+    placeholder: string;
+  }>;
+}
+```
+
+- `awaiting_coding_approval` 상태에서만 허용한다.
+- artifact digest와 expected version을 검증한다.
+- 응답을 그대로 권한이나 명령으로 취급하지 않고 길이와 schema를 검증한다.
+- UI는 endpoint가 아직 없거나 실패하면 현재의 패킷 기반 기본 질문으로 회의를 계속한다.
+- 사람 답변은 생각 과정을 저장하지 않고 4,000자 이하 `developmentBrief`로 압축한다.
+
+구현 승인 요청은 다음처럼 brief를 함께 받는다.
+
+```json
+{
+  "action": "approve_coding",
+  "expectedVersion": 12,
+  "artifactDigest": "...",
+  "feedback": "[아틀라스 개발 사전 미팅]\n목표: ...\n구현 경계: ..."
+}
+```
+
+현재 코드에서는 하위 호환을 위해 이 값을 기존 `reviewFeedback` 저장 필드와 Claude prompt에
+전달한다. company 다중 에이전트 구현 시에는 명시적인 `developmentBrief`로 승격하고
+`lead_plan`의 필수 입력으로 사용한다. 회의를 생략한 기존 클라이언트의 `feedback` 없는 승인도
+계속 허용한다.
 
 이 방식의 장점:
 

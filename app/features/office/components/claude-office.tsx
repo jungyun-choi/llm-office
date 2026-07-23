@@ -13,22 +13,22 @@ const PHASES: readonly {
 }[] = [
   {
     id: "implementation",
-    label: "BUILDER",
-    title: "구현 담당",
+    label: "BUILDER · 구현 담당",
+    title: "메이슨",
     model: "Claude Sonnet",
-    description: "팀장 지시에 따라 코드와 테스트를 구현",
+    description: "아틀라스의 지시에 따라 코드와 테스트를 구현",
   },
   {
     id: "verification",
-    label: "VERIFIER",
-    title: "검증 담당",
+    label: "VERIFIER · 검증 담당",
+    title: "베라",
     model: "Claude Sonnet",
     description: "Diff · 테스트 · 회귀 위험을 독립 검증",
   },
   {
     id: "publisher",
-    label: "RELEASE",
-    title: "Git 담당",
+    label: "RELEASE · Git 담당",
+    title: "릴레이",
     model: "Claude Haiku",
     description: "승인된 변경의 Commit · Push · PR 처리",
   },
@@ -56,9 +56,9 @@ export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
         <DevelopmentStation
           id="claude"
           label="TEAM LEAD · OPUS"
-          title="클로드 팀장"
+          title="아틀라스"
           model="Claude Opus"
-          description={getClaudeActivity(job)}
+          description={`개발팀장 · ${getClaudeActivity(job)}`}
           state={leadState}
           lead
         />
@@ -80,12 +80,12 @@ export function ClaudeOffice({ job, runtimeLabel }: ClaudeOfficeProps) {
 }
 
 const IMPLEMENTATION_PLAN = [
-  "Opus 계획",
-  "Sonnet 구현",
-  "Opus 코드 리뷰",
-  "Sonnet 검증",
-  "Opus 최종 판단",
-  "Haiku Git · PR",
+  "아틀라스 · 계획",
+  "메이슨 · 구현",
+  "아틀라스 · 코드 리뷰",
+  "베라 · 검증",
+  "아틀라스 · 최종 판단",
+  "릴레이 · Git · PR",
 ] as const;
 
 type ImplementationPlanState = "pending" | "active" | "completed" | "failed";
@@ -318,7 +318,7 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   if (!job || ["queued", "analyzing", "canceled"].includes(job.state) || isPreDevelopmentFailure(job)) {
     return {
       from: "검토팀",
-      to: "Opus 팀장",
+      to: "아틀라스",
       message: "승인된 구현 패킷을 기다리고 있습니다.",
       tone: "idle",
     };
@@ -326,54 +326,54 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   if (job.state === "awaiting_coding_approval") {
     return {
       from: "검토팀",
-      to: "Opus 팀장",
-      message: "구현 승인 전에는 개발팀이 코드를 수정하지 않습니다.",
+      to: "아틀라스",
+      message: "분석 패킷을 함께 검토하고 개발 사전 미팅을 준비합니다.",
       tone: "idle",
     };
   }
   if (job.state === "coding_queued") {
     return {
-      from: "Opus 팀장",
-      to: "Sonnet 구현",
+      from: "아틀라스",
+      to: "메이슨",
       message: "분석 패킷을 검토하고 구현 순서와 작업 지시를 준비합니다.",
       tone: "active",
     };
   }
   if (job.state === "coding") {
     return {
-      from: "Opus 팀장",
-      to: "Sonnet 구현",
+      from: "아틀라스",
+      to: "메이슨",
       message: "구현 지시 전달 · 막히는 내용은 근거와 함께 팀장에게 보고합니다.",
       tone: "active",
     };
   }
   if (job.state === "testing") {
     return {
-      from: "Sonnet 구현",
-      to: "Sonnet 검증",
+      from: "메이슨",
+      to: "베라",
       message: "변경 파일과 구현 결과를 인계해 독립 검증을 진행합니다.",
       tone: "active",
     };
   }
   if (job.state === "changes_ready") {
     return {
-      from: "Sonnet 검증",
-      to: "Opus 팀장",
+      from: "베라",
+      to: "아틀라스",
       message: "검증 결과를 보고하고 사용자의 Git 승인을 기다립니다.",
       tone: "complete",
     };
   }
   if (job.state === "publishing") {
     return {
-      from: "Opus 팀장",
-      to: "Haiku Git",
+      from: "아틀라스",
+      to: "릴레이",
       message: "사용자가 승인한 변경의 Commit · Push · PR 작업을 지시합니다.",
       tone: "active",
     };
   }
   if (["review_pending", "merging"].includes(job.state)) {
     return {
-      from: "Haiku Git",
+      from: "릴레이",
       to: "검토팀",
       message: "PR과 Git 결과를 전달해 사용자의 최종 코드 검토를 기다립니다.",
       tone: "complete",
@@ -389,19 +389,19 @@ export function getDevelopmentExchange(job: OfficeJob | null): DevelopmentExchan
   }
   if (job.state === "failed") {
     const from = job.error?.stage === "testing"
-      ? "Sonnet 검증"
+      ? "베라"
       : job.error?.stage === "publishing"
-      ? "Haiku Git"
-      : "Sonnet 구현";
+      ? "릴레이"
+      : "메이슨";
     return {
       from,
-      to: "Opus 팀장",
+      to: "아틀라스",
       message: job.error?.message ?? "작업을 계속하기 위한 팀장 지시가 필요합니다.",
       tone: "blocked",
     };
   }
   return {
-    from: "Opus 팀장",
+    from: "아틀라스",
     to: "개발팀",
     message: "현재 업무 상태를 확인하고 있습니다.",
     tone: "idle",

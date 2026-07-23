@@ -17,6 +17,7 @@ import {
   type OrbitQuestion,
 } from "../orbit-intake";
 import type { OfficeConnectionMode, OfficeRequestInput } from "../types";
+import { MeetingRoom } from "./meeting-room";
 
 type ComposerConnectionMode = OfficeConnectionMode | PocConnectionMode;
 
@@ -132,24 +133,21 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
   if (meeting) {
     const question = meeting.questions[meeting.questionIndex];
     return (
-      <section className="task-composer task-composer--meeting" aria-labelledby="orbit-meeting-title">
-        <div className="orbit-meeting__header">
-          <span className="orbit-meeting__avatar"><MessageCircleQuestion size={20} aria-hidden="true" /></span>
-          <div>
-            <small>{OFFICE_COPY.composer.meetingEyebrow}</small>
-            <strong id="orbit-meeting-title">
-              {meeting.phase === "review" ? OFFICE_COPY.composer.reviewTitle : OFFICE_COPY.composer.meetingTitle}
-            </strong>
-            <p>{meeting.phase === "review" ? OFFICE_COPY.composer.reviewDescription : OFFICE_COPY.composer.meetingDescription}</p>
-            <span className="orbit-meeting__source" data-source={meeting.source}>
-              {meeting.source === "company-opencode" ? OFFICE_COPY.composer.meetingModelSource : OFFICE_COPY.composer.meetingFallbackSource}
-              {meeting.model ? ` · ${meeting.model}` : ""}
-            </span>
-          </div>
-          <button className="orbit-meeting__close" type="button" onClick={() => setMeeting(null)}>
-            {OFFICE_COPY.composer.cancelMeeting}
-          </button>
-        </div>
+      <MeetingRoom
+        id="orbit-meeting-title"
+        className="task-composer task-composer--meeting"
+        theme="orbit"
+        eyebrow={OFFICE_COPY.composer.meetingEyebrow}
+        title={meeting.phase === "review" ? OFFICE_COPY.composer.reviewTitle : OFFICE_COPY.composer.meetingTitle}
+        description={meeting.phase === "review" ? OFFICE_COPY.composer.reviewDescription : OFFICE_COPY.composer.meetingDescription}
+        hostName="오비트"
+        hostRole="분석팀장"
+        hostModel={meeting.model}
+        sourceLabel={meeting.source === "company-opencode"
+          ? OFFICE_COPY.composer.meetingModelSource
+          : OFFICE_COPY.composer.meetingFallbackSource}
+        onClose={() => setMeeting(null)}
+      >
         {meeting.notice && <p className="orbit-meeting__notice" role="status">{meeting.notice}</p>}
         {meeting.phase === "questions" && question ? (
           <form className="orbit-question" onSubmit={(event) => { event.preventDefault(); answerQuestion(answer); }}>
@@ -205,7 +203,7 @@ export function TaskComposer({ isRunning, isSubmitting, connectionMode, queueErr
           </div>
         ) : null}
         {queueErrorMessage && <p className="task-composer__error" role="alert">{queueErrorMessage}</p>}
-      </section>
+      </MeetingRoom>
     );
   }
 

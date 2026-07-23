@@ -40,6 +40,7 @@ export const jobActionSchema = z.discriminatedUnion("action", [
   actionBase.extend({
     action: z.literal("approve_coding"),
     artifactDigest: z.string().regex(digestPattern),
+    feedback: z.string().trim().min(1).max(4_000).optional(),
   }).strict(),
   actionBase.extend({
     action: z.literal("publish_changes"),

@@ -157,7 +157,9 @@ export class JobService {
       });
     }
     let patch: Partial<JobRecord>;
-    if (input.action === "approve_coding") patch = this.approveCoding(current, input.artifactDigest);
+    if (input.action === "approve_coding") {
+      patch = this.approveCoding(current, input.artifactDigest, input.feedback);
+    }
     else if (input.action === "publish_changes") {
       patch = this.queuePublishing(current, input.artifactDigest, input.mode);
     } else if (input.action === "request_changes") {
@@ -378,7 +380,11 @@ export class JobService {
     return current;
   }
 
-  private approveCoding(current: JobRecord, artifactDigest: string): Partial<JobRecord> {
+  private approveCoding(
+    current: JobRecord,
+    artifactDigest: string,
+    developmentBrief?: string,
+  ): Partial<JobRecord> {
     if (current.state !== "awaiting_coding_approval" || !current.codingPacket) {
       throw invalidAction("이 업무는 현재 코딩 승인을 받을 수 없습니다.");
     }
@@ -397,6 +403,7 @@ export class JobService {
       updatedAt: new Date().toISOString(),
       error: undefined,
       cancelRequested: false,
+      reviewFeedback: developmentBrief?.trim(),
     };
   }
 

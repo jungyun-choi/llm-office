@@ -203,6 +203,36 @@ test("final review can send feedback back to Claude on the same PR branch", asyn
   repository.close();
 });
 
+test("coding approval carries the Atlas meeting brief into the Claude prompt", async () => {
+  const repository = new SqliteJobRepository(":memory:");
+  const config = syntheticConfig();
+  const service = new JobService(repository, inertExecutor(), config);
+  const analysis = await runHostedPoc({
+    prompt: "합성 개발 사전 미팅을 검증해 주세요",
+    executionMode: "demo",
+  });
+  const job = baseJob("합성 개발 사전 미팅을 검증해 주세요");
+  job.analysis = analysis;
+  job.codingPacket = await service.buildCodingPacket(job, analysis);
+  job.state = "awaiting_coding_approval";
+  repository.create(job);
+
+  const feedback = "[아틀라스 개발 사전 미팅]\n구현 경계: 공개 인터페이스는 유지해 주세요.";
+  const result = await service.act(job.id, {
+    action: "approve_coding",
+    expectedVersion: job.version,
+    artifactDigest: job.codingPacket.digest,
+    feedback,
+  }, "atlas-meeting-approval");
+
+  assert.equal(result.job.state, "coding_queued");
+  const stored = repository.get(job.id);
+  assert.equal(stored?.reviewFeedback, feedback);
+  assert.match(buildClaudePrompt(stored as JobRecord, config), /아틀라스 개발 사전 미팅/u);
+  assert.match(buildClaudePrompt(stored as JobRecord, config), /공개 인터페이스/u);
+  repository.close();
+});
+
 test("final merge approval completes only after the pull request gateway succeeds", async () => {
   const repository = new SqliteJobRepository(":memory:");
   const executor = inertExecutor();
